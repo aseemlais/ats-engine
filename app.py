@@ -21,7 +21,7 @@ import spaces
 import gradio as gr
 from app.server import app as fastapi_app, adapter
 
-@spaces.GPU
+@spaces.GPU(duration=60)
 def evaluate_candidate_gpu(job_description: str, resume_text: str):
     res = adapter.evaluate_candidate(
         job_title="Candidate Evaluation",
@@ -41,10 +41,15 @@ demo = gr.Interface(
     description="ZeroGPU-accelerated candidate screening and ranking backend."
 )
 
-# Disable SSR mode to prevent port 7861 binding conflicts on Hugging Face Spaces
-app = gr.mount_gradio_app(fastapi_app, demo, path="/", ssr_mode=False)
-
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.environ.get("PORT", 7860))
-    uvicorn.run(app, host="0.0.0.0", port=port, reload=False)
+    app, local_url, share_url = demo.launch(
+        server_name="0.0.0.0",
+        server_port=port,
+        prevent_thread_lock=True,
+        ssr_mode=False
+    )
+    # Expose all ATS FastAPI routes on the running server
+    for route in fastapi_app.routes:
+        app.routes.append(route)
+    demo.block_thread()
