@@ -1,0 +1,80 @@
+Job Description – Data Engineering Trainee – Databricks
+Position
+Data Engineering Trainee – Databricks
+Location
+Coimbatore
+Employment Type
+Full-Time
+Openings
+20 Candidates(Data Engineering Trainee) and 5 Candidates(Night shift)
+About the Role
+We are looking for motivated and talented candidates to join our team as Data Engineering Trainees – Databricks.
+This role is an opportunity for candidates who have a strong foundation in SQL/MySQL and Python and are interested in building a career in Data Engineering and Databricks.
+Selected candidates will undergo structured training in Databricks and Data Engineering and, based on their performance and project readiness, will have the opportunity to transition into a project/billing role.
+Key Criteria
+Mandatory Technical Requirements
+The following two skills are mandatory for this role:
+1. SQL / MySQL – Strong Hands-on Knowledge
+• Strong understanding of SQL fundamentals
+• Ability to write and execute SQL queries independently
+• Hands-on knowledge of joins, aggregations, subqueries, CTEs, and window functions
+• Ability to work with and analyze data using SQL/MySQL
+2. Python – Good Working Knowledge
+• Good understanding of Python fundamentals
+• Ability to write and debug Python programs
+• Hands-on experience with Python programming and data manipulation
+• Good problem-solving ability using Python
+General Technical Requirements
+Candidates should have a basic understanding or familiarity with the following areas:
+• Data Engineering concepts
+• ETL/ELT concepts and data pipelines
+• Basic cloud concepts
+• PySpark
+• Apache Spark fundamentals
+• Databricks
+Prior experience in PySpark, Spark, or Databricks is not mandatory. Candidates
+with a strong foundation in SQL/MySQL and Python will be considered and trained
+on the required technologies.
+Other Key Attributes
+Candidates should demonstrate:
+• Good communication skills
+• Strong analytical and problem-solving ability
+• Smart and quick-learning mindset
+• Willingness to learn new technologies
+• Positive attitude and adaptability
+• Strong commitment to building a long-term career with the organization
+Compensation & Career Path
+During Training
+• ₹10,000 per month
+• Candidates will undergo structured training in Databricks and Data
+Engineering during the initial non-billing period.
+Completion of Training
+Candidates who successfully complete the training and meet the required
+performance and project-readiness criteria will transition into a project/billing role.
+Salary: ₹3,00,000 per annum (3 LPA)
+Night Shift Requirement
+We have an additional requirement for 5 candidates who are willing and comfortable
+to work in the night shift.
+Candidates applying for these positions should be comfortable with night-shift
+working arrangements.
+Selection Process
+Resume Screening → Aptitude Assessment → Technical Assessment → HR
+Interview → Technical Interview → Final Review → Selection
+The technical assessment will primarily focus on SQL/MySQL and Python, along
+with basic problem-solving and data-related concepts.
+Knowledge of PySpark, Spark, Databricks, ETL, and cloud concepts may also be
+considered during the evaluation.
+Commitment
+Selected candidates will be required to comply with the organization's applicable
+training and employment commitment agreement.
+Career Opportunity
+This role provides candidates with an opportunity to:
+• Build a strong foundation in Data Engineering and Databricks
+• Receive structured technical training
+• Gain hands-on exposure to modern data technologies
+• Work towards transitioning into a Data Engineer role
+• Gain exposure to real-world data engineering projects
+• Build a long-term career in the data engineering domain
+Career Path:
+Data Engineering Trainee – Databricks → Data Engineer → Senior Data
+Engineer.

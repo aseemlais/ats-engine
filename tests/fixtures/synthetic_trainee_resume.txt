@@ -1,0 +1,28 @@
+SYNTHETIC FIXTURE reconstructed from a written description of the diagnostic candidate; not the original resume.
+Anjali Raman
+anjali.raman.synthetic@example.com | 9000000000
+
+EDUCATION
+M.Sc. Data Science and Business Analysis, Example University - CGPA 8.4
+B.Sc. Mathematics, Example College - CGPA 7.9
+
+SKILLS
+SQL, Python, DBMS, Pandas, NumPy, Data Engineering, ETL/ELT, Data Pipelines, Apache Spark, PySpark, Databricks, AWS (cloud basics)
+
+INTERNSHIP
+Data Science Intern - Example Analytics Pvt Ltd (Jan 2025 - Mar 2025)
+- Built reporting notebooks in Python and SQL; completed low-code platform training
+
+PROJECTS
+Fashion Boutique Data Pipeline (Databricks)
+- Bronze-Silver-Gold medallion architecture: ingestion, data cleaning and transformation, analytical preparation
+Customer Churn Prediction
+- Modelled churn on 7,000+ records with Python and Pandas
+Geospatial BI Project
+- Dashboards for location analytics
+
+CERTIFICATIONS
+IBM SQL for Data Science
+Google Data Analytics Certificate
+NPTEL DBMS Elite
+LinkedIn Learning Machine Learning Foundations

@@ -1,0 +1,30 @@
+Data Engineering Trainee - Databricks
+
+About the role
+This is an entry-level / fresher position. You will be trained on Databricks and modern data engineering practices.
+
+Responsibilities
+- Build and maintain simple data pipelines under guidance
+- Write SQL queries to transform and validate data
+- Support ETL/ELT workflows on the Databricks platform
+
+Mandatory Requirements
+- SQL / MySQL: strong fundamentals and hands-on query writing, including joins, aggregations, subqueries, CTEs and window functions
+- Python: working knowledge of programming fundamentals, debugging and data manipulation
+
+Supporting Skills
+- Data engineering concepts
+- ETL/ELT
+- Data pipelines
+- Basic cloud concepts
+- PySpark
+- Apache Spark
+- Databricks
+
+Prior professional experience in Spark, PySpark or Databricks is not mandatory because candidates will receive training.
+Certifications are not mandatory.
+
+Desirable attributes
+- Analytical and problem-solving ability
+- Communication skills
+- Adaptability and willingness to learn

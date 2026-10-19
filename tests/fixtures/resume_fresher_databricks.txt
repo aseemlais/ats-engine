@@ -1,0 +1,43 @@
+Aarav Sharma
+aarav.sharma@example.com | +91 90000 00000
+
+PROFESSIONAL SUMMARY
+M.Sc. Data Science and Business Analysis postgraduate with a strong foundation in Python, SQL, DBMS, and data manipulation. Hands-on experience with Python, Pandas, NumPy, SQL, and data analytics projects. Familiar with Data Engineering concepts, ETL/ELT workflows, data pipelines, Apache Spark, PySpark, Databricks, and basic cloud computing concepts. Strong mathematical and analytical background with a quick-learning mindset and willingness to build expertise in Databricks and modern data engineering technologies.
+
+TECHNICAL SKILLS
+- Programming and databases: Python, SQL, DBMS, Pandas, NumPy
+- Data engineering: ETL/ELT, data pipelines, data transformation, Apache Spark, PySpark, Databricks
+- Cloud fundamentals: AWS fundamentals, cloud storage, compute services, IAM basics, regions, availability zones, and basic cloud architecture
+- Data and analytics: data manipulation, data cleaning, feature engineering, exploratory data analysis, Excel
+- Tools: Jupyter Notebook, VS Code, GitHub, Power BI
+
+INTERNSHIP AND TRAINING
+- Data Science internship involving foundational Python, NumPy, Pandas, data manipulation, preprocessing, and analytical workflows.
+- Structured low-code/no-code application-development training.
+
+PROJECTS
+Databricks Fashion Boutique Data Pipeline
+- Implemented a Bronze-Silver-Gold data processing workflow in Databricks.
+- Used Python, SQL, and PySpark for structured data processing.
+- Performed data cleaning, transformation, ingestion, and analytical preparation.
+
+Agentic Customer Churn Prediction and Retention Platform
+- Developed a Random Forest churn prediction system using 7,000+ telecom customer records.
+- Performed preprocessing, feature preparation, model training, and prediction using Python and Pandas.
+- Built a Streamlit application.
+
+Geospatial Business Intelligence - Site Selection
+- Used Python, Pandas, geospatial data, and machine learning.
+- Performed data cleaning, feature engineering, and analysis.
+- Applied Random Forest and SHAP to evaluate business-location suitability.
+
+EDUCATION
+M.Sc. Data Science and Business Analysis, CGPA 8.4
+B.Sc. Mathematics, CGPA 7.9, with Statistics and Physics
+
+CERTIFICATIONS
+- IBM: Databases and SQL for Data Science with Python
+- Google: Foundations of Business Intelligence
+- Google: Introduction to Data Analysis Using Python
+- NPTEL: Database Management System, Elite
+- LinkedIn Learning: Machine Learning with Python: Foundations

@@ -1,0 +1,37 @@
+PROFESSIONAL SUMMARY
+M.Sc. Data Science and Business Analysis postgraduate with a strong foundation in Python, SQL, DBMS, and data manipulation. Hands-on
+experience with Python, Pandas, NumPy, SQL, and data analytics projects. Familiar with Data Engineering concepts, ETL/ELT workflows, data
+pipelines, Apache Spark, PySpark, Databricks, and basic cloud computing concepts. Strong mathematical and analytical background with a
+quick-learning mindset and willingness to build expertise in Databricks and modern data engineering technologies.
+TECHNICAL SKILLS
+Programming & Databases: Python, SQL, DBMS, Pandas, NumPy
+Data Engineering: ETL/ELT Concepts, Data Pipelines, Data Transformation, Apache Spark, PySpark, Databricks
+Cloud Fundamentals: AWS Cloud Fundamentals, Cloud Storage, Compute Services, IAM Basics, Regions & Availability Zones, Basic Cloud
+Architecture
+Data & Analytics: Data Manipulation, Data Cleaning, Feature Engineering, Exploratory Data Analysis, Excel
+Tools: Jupyter Notebook, VS Code, GitHub, Power BI
+INTERNSHIP & TRAINING
+TechnoCovai — Data Science Intern | May 2026
+• Completed foundational training in Python, NumPy, Pandas, data manipulation, and Machine Learning.
+• Practiced working with arrays, tabular datasets, data preprocessing, and basic analytical workflows.
+Mahat Labs Private Limited — Mahat Citizen Developer Level 1 | April 2026
+• Completed structured training in application development and low-code/no-code development concepts.
+PROJECTS
+Databricks Fashion Boutique Data Pipeline | Databricks | Python | SQL | PySpark
+• Implemented a Bronze–Silver–Gold data processing workflow in Databricks for organizing raw, cleaned, and transformed business data.
+• Performed data cleaning, transformation, and preparation for downstream analytics using a structured data pipeline approach.
+• Worked with data engineering concepts including data ingestion, transformation, layered processing, and analytical data preparation.
+Agentic Customer Churn Prediction & Retention Platform | Python | Scikit-learn | Streamlit
+• Developed a customer churn prediction system using Random Forest on 7,000+ telecom customer records to identify high-risk customers.
+• Performed data preprocessing, feature preparation, model training, and prediction using Python and Pandas.
+• Built a Streamlit application to present customer-level predictions and retention insights.
+Geospatial Business Intelligence – Site Selection | Python | Pandas | GIS | Machine Learning
+• Developed a data-driven site evaluation system using business, POI, competition, accessibility, and location data.
+• Performed data cleaning, feature engineering, transformation, and analysis using Python and Pandas.
+• Applied Random Forest and SHAP to evaluate factors influencing business location suitability.
+EDUCATION
+M.Sc. Data Science and Business Analysis — Rathinam Global Deemed to be University | 2025–2027 | CGPA: 8.4
+B.Sc. Mathematics — Government College Chittur | 2022–2025 | CGPA: 7.9 | Complementary: Statistics & Physics
+CERTIFICATIONS
+IBM: Databases and SQL for Data Science with Python | Google: Foundations of Business Intelligence; Introduction to Data Analysis Using Python
+NPTEL: Database Management System — Elite (64%) | LinkedIn Learning: Machine Learning with Python: Foundations

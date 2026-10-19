@@ -1,0 +1,24 @@
+# SYNTHETIC FIXTURE reconstructed from a written description of the diagnostic JD; not the original file.
+Data Engineering Trainee - Databricks
+Location: Chennai (Hybrid)
+
+About the Role
+We are hiring a Data Engineering Trainee to join our analytics platform team. You will learn to build
+and maintain data pipelines on Databricks.
+
+Requirements
+- Strong knowledge of SQL or MySQL
+- Proficiency in Python
+- Understanding of data engineering concepts such as ETL/ELT and data pipelines
+
+Good to have
+- Exposure to PySpark / Spark and Databricks
+- Cloud basics (AWS, Azure or GCP)
+- Spark experience is not mandatory; training will be provided
+
+What we value
+- Problem-solving, communication, adaptability and willingness to learn
+
+Eligibility
+- Bachelor's or Master's degree in Computer Science, Data Science, Statistics or a related field
+- Freshers welcome. No prior experience required.
