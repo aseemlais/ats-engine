@@ -1,3 +1,4 @@
+spaces
 fastapi>=0.110.0
 uvicorn>=0.28.0
 gradio>=5.16.0
