@@ -65,7 +65,8 @@ class EmbeddingService:
             try:
                 if SentenceTransformer is None or SentenceTransformer is object:
                     raise ImportError("sentence-transformers is not installed")
-                self._model = SentenceTransformer(self.model_name)
+                device = os.getenv("EMBEDDING_DEVICE", "cpu")
+                self._model = SentenceTransformer(self.model_name, device=device)
             except Exception as e:                    # noqa: BLE001 - any load failure means "unavailable"
                 self._load_error = f"Embedding model '{self.model_name}' unavailable: {type(e).__name__}: {str(e)[:200]}"
                 raise EmbeddingUnavailableError(self._load_error) from e
