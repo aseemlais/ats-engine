@@ -1,58 +1,48 @@
 import os
 import sys
+import json
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parent
 if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
-# import spaces before any torch or transformers modules are loaded
-try:
-    import spaces
-except ImportError:
-    class MockSpaces:
-        def GPU(self, fn=None, duration=None):
-            if fn is not None:
-                return fn
-            def decorator(f):
-                return f
-            return decorator
-    spaces = MockSpaces()
+# Ensure spaces module exists for local compatibility
+if "spaces" not in sys.modules:
+    try:
+        import spaces
+    except ImportError:
+        import types
+        mock_spaces = types.ModuleType("spaces")
+        mock_spaces.GPU = lambda fn=None, duration=None: fn if callable(fn) else (lambda f: f)
+        sys.modules["spaces"] = mock_spaces
 
-try:
-    import gradio as gr
-    has_gradio = True
-except ImportError:
-    has_gradio = False
-
+import spaces
+import gradio as gr
 from app.server import app as fastapi_app, adapter
 
-if has_gradio:
-    @spaces.GPU
-    def evaluate_candidate_gpu(job_description: str, resume_text: str):
-        res = adapter.evaluate_candidate(
-            job_title="Candidate Evaluation",
-            job_description=job_description or "Software Engineer",
-            resume_text=resume_text or "Python Developer"
-        )
-        import json
-        return json.dumps(res, indent=2)
-
-    demo = gr.Interface(
-        fn=evaluate_candidate_gpu,
-        inputs=[
-            gr.Textbox(label="Job Description", lines=4, placeholder="Enter job description..."),
-            gr.Textbox(label="Resume Text", lines=4, placeholder="Enter resume text...")
-        ],
-        outputs=gr.Code(label="Screening Output (JSON)", language="json"),
-        title="⚡ Scalable Hybrid Semantic ATS Engine",
-        description="ZeroGPU-accelerated candidate screening and ranking backend."
+@spaces.GPU
+def evaluate_candidate_gpu(job_description: str, resume_text: str):
+    res = adapter.evaluate_candidate(
+        job_title="Candidate Evaluation",
+        job_description=job_description or "Software Engineer",
+        resume_text=resume_text or "Python Developer"
     )
+    return json.dumps(res, indent=2)
 
-    # Disable SSR mode to prevent port 7861 binding conflicts on Hugging Face Spaces
-    app = gr.mount_gradio_app(fastapi_app, demo, path="/", ssr_mode=False)
-else:
-    app = fastapi_app
+demo = gr.Interface(
+    fn=evaluate_candidate_gpu,
+    inputs=[
+        gr.Textbox(label="Job Description", lines=4, placeholder="Enter job description..."),
+        gr.Textbox(label="Resume Text", lines=4, placeholder="Enter resume text...")
+    ],
+    outputs=gr.Code(label="Screening Output (JSON)", language="json"),
+    title="⚡ Scalable Hybrid Semantic ATS Engine",
+    description="ZeroGPU-accelerated candidate screening and ranking backend."
+)
+
+# Disable SSR mode to prevent port 7861 binding conflicts on Hugging Face Spaces
+app = gr.mount_gradio_app(fastapi_app, demo, path="/", ssr_mode=False)
 
 if __name__ == "__main__":
     import uvicorn
