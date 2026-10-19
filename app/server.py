@@ -40,6 +40,15 @@ REF_CLIENT_DIST = Path(r"C:\Users\LENOVO\Downloads\Resume Screening and Shortlis
 adapter = ATSScreeningAdapter()
 parser = ResumeParserService()
 
+@app.get("/")
+def root():
+    return {
+        "status": "healthy",
+        "service": "Hybrid Semantic ATS Engine",
+        "docs": "/docs",
+        "health": "/health"
+    }
+
 @app.get("/health")
 def health():
     return {"status": "healthy", "service": "Hybrid Semantic ATS"}
