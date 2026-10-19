@@ -1,3 +1,13 @@
+---
+title: Hybrid Semantic ATS Engine
+emoji: ⚡
+colorFrom: blue
+colorTo: indigo
+sdk: docker
+app_port: 7860
+pinned: false
+---
+
 # Scalable Hybrid Semantic ATS for 10,000+ Resumes
 
 An NLP-powered scalable Applicant Tracking System designed to retrieve and rank relevant candidates from 10,000+ resumes using hybrid information retrieval. The system combines BM25 lexical search, Sentence Transformer semantic embeddings, vector search, structured skill/experience matching, and explainable candidate ranking without requiring LLM-based generation.
