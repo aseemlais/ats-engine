@@ -30,6 +30,7 @@ class ParsedResume(BaseModel):
     work_experience_years: float = 0.0
     internship_years: float = 0.0
     job_titles: List[str] = Field(default_factory=list)
+    current_role: Optional[str] = None
     education: List[EducationEntry] = Field(default_factory=list)
     degrees: List[str] = Field(default_factory=list)
     projects: List[str] = Field(default_factory=list)

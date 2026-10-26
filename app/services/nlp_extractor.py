@@ -71,6 +71,25 @@ DEGREE_LINE_RE = re.compile(
     re.I
 )
 
+PRESENT_RE = re.compile(r"\b(present|current|now|ongoing|till\s+date|currently\s+working)\b", re.I)
+
+ROLE_KEYWORDS = {
+    "developer", "engineer", "analyst", "scientist", "architect",
+    "consultant", "specialist", "manager", "lead", "administrator",
+    "associate", "director", "coordinator", "officer", "executive",
+    "programmer", "technician", "researcher", "designer", "instructor",
+    "assistant", "intern", "internship", "trainee", "fellow", "expert",
+    "auditor", "accountant", "recruiter", "strategist", "planner",
+    "operator", "supervisor", "representative", "writer", "editor",
+    "head", "founder", "co-founder", "cto", "ceo", "cfo", "vp"
+}
+
+COMPANY_SUFFIXES = {
+    "inc", "llc", "ltd", "corp", "corporation", "technologies", "solutions",
+    "labs", "pvt", "gmbh", "company", "co", "services", "group", "systems",
+    "consulting", "university", "institute", "college", "school"
+}
+
 class NLPExtractorService:
     def __init__(self):
         self.current_year = datetime.now().year
@@ -564,6 +583,305 @@ class NLPExtractorService:
 
         return entries
 
+    @staticmethod
+    def clean_job_title(raw_title: str) -> str:
+        if not raw_title:
+            return ""
+        # Strip bullets, numbers, and leading punctuation
+        t = re.sub(r"^[\s\-\*\•\–\—\d\.\)\:]+", "", raw_title).strip()
+        # Strip date substrings and ranges
+        t = DATE_WITH_MONTH_RE.sub("", t)
+        t = DATE_SLASH_RE.sub("", t)
+        t = DATE_DOT_RE.sub("", t)
+        t = YEAR_RANGE_RE.sub("", t)
+        t = SINGLE_MONTH_YEAR_RE.sub("", t)
+        t = PRESENT_RE.sub("", t)
+        # Strip empty brackets/parentheses
+        t = re.sub(r"[\(\[\{][\s\-\–]*[\)\]\}]", "", t)
+        # Strip prefixes like "Role:", "Title:", "Position:", "Worked as", "Working as"
+        t = re.sub(r"^(?:role|position|designation|job\s+title|worked\s+as|working\s+as)\s*[:\-–—]\s*", "", t, flags=re.I)
+
+        # Check delimiters separating Title and Company/Location
+        delims = [" | ", " - ", " – ", " — ", " at ", " @ ", " from ", "\t"]
+        for delim in delims:
+            if delim in t:
+                parts = [p.strip() for p in t.split(delim) if p.strip()]
+                if len(parts) >= 2:
+                    scored = []
+                    for p in parts:
+                        score = 0
+                        words = [w.lower().strip(".,;:()") for w in p.split()]
+                        for w in words:
+                            if w in ROLE_KEYWORDS:
+                                score += 10
+                            if w in ("senior", "junior", "lead", "staff", "principal", "chief", "head"):
+                                score += 5
+                            if w in COMPANY_SUFFIXES:
+                                score -= 5
+                        if len(words) > 6:
+                            score -= 5
+                        scored.append((score, p))
+                    scored.sort(key=lambda x: x[0], reverse=True)
+                    if scored[0][0] > scored[1][0] and scored[0][0] >= 5:
+                        t = scored[0][1]
+                        break
+
+        # Clean punctuation
+        t = t.strip(" \t\n\r,.:;|–-—()[]{}")
+
+        # Convert "Data Science internship" -> "Data Science Intern"
+        if re.search(r"\binternship\b", t, re.I):
+            t = re.sub(r"\binternship\b", "Intern", t, flags=re.I)
+
+        # Capitalize nicely if all uppercase or all lowercase
+        if t.isupper() or t.islower():
+            t = t.title()
+
+        return t.strip()
+
+    @staticmethod
+    def _is_section_header(line: str) -> bool:
+        clean = line.strip().strip(":#*-–— \t").lower()
+        if not clean:
+            return True
+        for pattern in SECTION_PATTERNS.values():
+            if pattern.match(clean):
+                return True
+        known_headers = {
+            "experience", "work experience", "professional experience",
+            "internship", "internships", "internship and training", "internship experience",
+            "projects", "academic projects", "technical projects",
+            "education", "academic background", "academics",
+            "skills", "technical skills", "core competencies",
+            "certifications", "certificates", "employment history", "career history",
+            "summary", "professional summary", "objective", "career objective"
+        }
+        return clean in known_headers
+
+    @staticmethod
+    def _is_education_or_degree(line: str) -> bool:
+        if not line:
+            return False
+        if DEGREE_LINE_RE.search(line):
+            return True
+        if re.search(r"\b(b\.?tech|b\.?e|bachelor|m\.?tech|m\.?s|master|ph\.?d|doctorate|degree|diploma|cgpa|gpa|university|college|school)\b", line, re.I):
+            return True
+        return False
+
+    def _extract_role_entries_from_section(self, text: str, section_name: str, base_order: int = 0) -> List[dict]:
+        entries: List[dict] = []
+        if not text.strip():
+            return entries
+
+        date_matches = self._find_date_matches(text)
+        bullets = ("-", "*", "\u2022", "\u2013", "\u2014")
+
+        if date_matches:
+            prev_end = 0
+            for idx, dm in enumerate(date_matches):
+                line_start = text.rfind("\n", 0, dm.start()) + 1
+                line_end = text.find("\n", dm.end())
+                line_end = len(text) if line_end == -1 else line_end
+                date_line = text[line_start:line_end].strip()
+
+                iv = self._match_interval(dm)
+
+                context_around = text[max(0, line_start - 60):min(len(text), line_end + 60)]
+                is_curr = bool(PRESENT_RE.search(context_around) or PRESENT_RE.search(date_line))
+
+                before_lines = [
+                    l.strip() for l in text[max(prev_end, 0):line_start].splitlines()
+                    if l.strip() and not self._is_section_header(l) and not l.strip().startswith(bullets)
+                ][-2:]
+
+                candidate_lines = []
+                rem = self.clean_job_title(date_line)
+                if len(rem.split()) >= 1 and not rem.isdigit() and not self._is_section_header(rem):
+                    candidate_lines.append(date_line)
+
+                for bl in reversed(before_lines):
+                    if not self._is_section_header(bl):
+                        candidate_lines.append(bl)
+
+                after_lines = [
+                    l.strip() for l in text[line_end:].splitlines()
+                    if l.strip() and not self._is_section_header(l) and not l.strip().startswith(bullets) and not self._find_date_matches(l)
+                ][:1]
+                if after_lines:
+                    candidate_lines.extend(after_lines)
+
+                best_title = ""
+                best_score = -1
+                for cand in candidate_lines:
+                    cleaned = self.clean_job_title(cand)
+                    if self._is_section_header(cleaned) or self._is_education_or_degree(cleaned):
+                        continue
+                    words = [w.lower() for w in cleaned.split()]
+                    if not words or len(words) > 7:
+                        continue
+                    score = 0
+                    for w in words:
+                        if w in ROLE_KEYWORDS:
+                            score += 10
+                        if w in ("senior", "junior", "lead", "staff", "principal", "chief", "head"):
+                            score += 5
+                        if w in COMPANY_SUFFIXES:
+                            score -= 5
+                    if section_name == "internship" or "intern" in words:
+                        score += 5
+
+                    if score > best_score:
+                        best_score = score
+                        best_title = cleaned
+
+                if not best_title and candidate_lines:
+                    for cand in candidate_lines:
+                        cleaned = self.clean_job_title(cand)
+                        if not self._is_section_header(cleaned) and not self._is_education_or_degree(cleaned) and 1 <= len(cleaned.split()) <= 6:
+                            best_title = cleaned
+                            break
+
+                prev_end = dm.end()
+
+                if best_title:
+                    is_intern = section_name == "internship" or bool(re.search(r"\b(intern|internship|trainee)\b", best_title, re.I))
+                    st_idx = iv[0] if iv else None
+                    en_idx = 999999 if is_curr else (iv[1] if iv else None)
+                    entries.append({
+                        "title": best_title,
+                        "start_idx": st_idx,
+                        "end_idx": en_idx,
+                        "is_current": is_curr,
+                        "is_internship": is_intern,
+                        "order": base_order + idx,
+                        "source_section": section_name
+                    })
+
+        # Also search for undated lines or bullet entries in the section
+        for idx, line in enumerate(text.splitlines()):
+            trimmed = line.strip().strip("-*•–— ")
+            if not trimmed or self._is_section_header(trimmed) or self._is_education_or_degree(trimmed) or len(trimmed) > 80:
+                continue
+
+            cleaned = self.clean_job_title(trimmed)
+            if self._is_section_header(cleaned) or self._is_education_or_degree(cleaned):
+                continue
+            words = [w.lower() for w in cleaned.split()]
+            if 1 <= len(words) <= 6 and any(w in ROLE_KEYWORDS for w in words):
+                if any(e["title"].lower() == cleaned.lower() for e in entries):
+                    continue
+                is_curr = bool(PRESENT_RE.search(trimmed))
+                is_intern = section_name == "internship" or bool(re.search(r"\b(intern|internship|trainee)\b", cleaned, re.I))
+                entries.append({
+                    "title": cleaned,
+                    "start_idx": None,
+                    "end_idx": 999999 if is_curr else None,
+                    "is_current": is_curr,
+                    "is_internship": is_intern,
+                    "order": base_order + len(date_matches) + idx,
+                    "source_section": section_name
+                })
+            elif section_name == "internship" or re.search(r"\b(intern|internship)\b", trimmed, re.I):
+                m = re.search(r"\b([A-Za-z\s]+(?:internship|intern|trainee))\b", trimmed, re.I)
+                if m:
+                    c_title = self.clean_job_title(m.group(1))
+                    if c_title and not self._is_section_header(c_title) and not self._is_education_or_degree(c_title) and not any(e["title"].lower() == c_title.lower() for e in entries):
+                        entries.append({
+                            "title": c_title,
+                            "start_idx": None,
+                            "end_idx": None,
+                            "is_current": False,
+                            "is_internship": True,
+                            "order": base_order + len(date_matches) + idx,
+                            "source_section": section_name
+                        })
+
+        return entries
+
+    def extract_candidate_role(
+        self,
+        full_text: str,
+        sections: Dict[str, str],
+        work_exp_years: float = 0.0,
+        intern_years: float = 0.0,
+        projects: Optional[List[str]] = None,
+        degrees: Optional[List[str]] = None,
+        skills: Optional[List[str]] = None
+    ) -> Tuple[str, List[str]]:
+        """
+        Extracts candidate's current or most recent role according to ATS recency rules:
+        1. Current role: ongoing/present role.
+        2. Most recent role: latest employment/internship by end date.
+        3. Internships: preserve actual internship title (e.g. Machine Learning Intern).
+        4. Freshers: return 'Fresher' if no employment/internship and only projects/coursework.
+        5. Unclear: return 'Role not identified' if insufficient evidence.
+        6. Missing dates: use best-supported employment information without inventing dates.
+        7. Multiple roles: evaluate complete employment history rather than just the first role.
+        """
+        projects = projects or []
+        degrees = degrees or []
+        skills = skills or []
+
+        all_entries: List[dict] = []
+
+        # 1. Experience section
+        exp_text = sections.get("experience", "").strip()
+        if exp_text:
+            all_entries.extend(self._extract_role_entries_from_section(exp_text, "experience", base_order=0))
+
+        # 2. Internship section
+        intern_text = sections.get("internship", "").strip()
+        if intern_text:
+            all_entries.extend(self._extract_role_entries_from_section(intern_text, "internship", base_order=len(all_entries)))
+
+        # Rule 4 pre-check: If candidate has no experience or internship sections and 0 experience
+        has_academic_projects = bool(sections.get("projects", "").strip()) or len(projects) > 0
+        has_education = bool(sections.get("education", "").strip()) or len(degrees) > 0
+        has_skills = bool(sections.get("skills", "").strip()) or len(skills) > 0
+
+        # 3. Fallback to candidate lines in full text only if not already established as 0-exp fresher
+        if not all_entries:
+            if work_exp_years <= 0 and intern_years <= 0:
+                if has_academic_projects or has_education or has_skills:
+                    return "Fresher", []
+
+            ignored_lines = set()
+            for sec in ["education", "skills", "projects", "certifications"]:
+                ignored_lines.update(sections.get(sec, "").splitlines())
+
+            cand_lines = [
+                l for l in full_text.splitlines()
+                if l.strip() and l not in ignored_lines and not self._is_education_or_degree(l)
+            ]
+            cand_text = "\n".join(cand_lines)
+            all_entries.extend(self._extract_role_entries_from_section(cand_text, "general", base_order=0))
+
+        all_titles = [e["title"] for e in all_entries if e.get("title")]
+
+        # Rule 1: Current role
+        current_entries = [e for e in all_entries if e.get("is_current")]
+        if current_entries:
+            current_entries.sort(key=lambda e: (e.get("start_idx") or 0, -e.get("order", 0)), reverse=True)
+            return current_entries[0]["title"], all_titles
+
+        # Rule 2: Most recent role by dates
+        dated_entries = [e for e in all_entries if e.get("end_idx") is not None]
+        if dated_entries:
+            dated_entries.sort(key=lambda e: (e.get("end_idx") or 0, e.get("start_idx") or 0, -e.get("order", 0)), reverse=True)
+            return dated_entries[0]["title"], all_titles
+
+        # Rule 6: Missing dates - best supported entry
+        if all_entries:
+            return all_entries[0]["title"], all_titles
+
+        # Rule 4: Freshers
+        if work_exp_years <= 0 and intern_years <= 0:
+            if has_academic_projects or has_education or has_skills:
+                return "Fresher", []
+
+        # Rule 5: Unclear information
+        return "Role not identified", []
+
     def extract_structured(self, candidate_id: str, source_file: str, file_hash: str, raw_text: str, cleaned_text: str) -> ParsedResume:
         """Orchestrates structured deterministic extraction without LLM calls."""
         name = self.extract_name(cleaned_text)
@@ -583,6 +901,17 @@ class NLPExtractorService:
         cert_raw = sections.get("certifications", "")
         cert_lines = [l.strip("- ") for l in cert_raw.splitlines() if len(l.strip()) > 3][:10]
 
+        # Extract candidate's actual current or most recent job role
+        role, job_titles = self.extract_candidate_role(
+            full_text=cleaned_text,
+            sections=sections,
+            work_exp_years=work_exp_years,
+            intern_years=intern_years,
+            projects=project_lines,
+            degrees=degrees,
+            skills=skills
+        )
+
         text_hash = compute_text_hash(cleaned_text)
 
         return ParsedResume(
@@ -599,6 +928,8 @@ class NLPExtractorService:
             experience_years=effective_exp_years,
             work_experience_years=work_exp_years,
             internship_years=intern_years,
+            job_titles=job_titles,
+            current_role=role,
             education=education_entries,
             degrees=degrees,
             projects=project_lines,

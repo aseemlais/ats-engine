@@ -208,7 +208,12 @@ async def invocations_endpoint(request: Request):
     }
 
 # Mount static files from reference client build if available
-if REF_CLIENT_DIST.exists():
+try:
+    client_dist_exists = REF_CLIENT_DIST.exists()
+except Exception:
+    client_dist_exists = False
+
+if client_dist_exists:
     app.mount("/assets", StaticFiles(directory=str(REF_CLIENT_DIST / "assets")), name="assets")
 
     @app.get("/{full_path:path}")
