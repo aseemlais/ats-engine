@@ -19,6 +19,8 @@ if str(ROOT_DIR) not in sys.path:
 
 from app.adapters.screening_adapter import ATSScreeningAdapter
 from app.services.resume_parser import ResumeParserService
+from app.storage.supabase_client import is_supabase_configured
+from app.storage.resume_storage import store_resume, ResumePersistenceError
 
 logger = logging.getLogger("ats_server")
 logging.basicConfig(level=logging.INFO)
@@ -92,15 +94,18 @@ async def get_config():
         "greeting": "Hybrid Semantic ATS Candidate Screening",
     }
 
-@app.post("/api/files/upload")
-async def upload_resume_file(file: UploadFile = File(...)):
+def process_resume_upload(
+    filename: str,
+    content: bytes,
+    content_type: str = "application/pdf"
+) -> Dict[str, Any] | JSONResponse:
     """
-    Implements the exact /api/files/upload endpoint expected by NewChatPage.tsx.
-    Extracts text from PDF, DOCX, and TXT using our layout-aware ATS ResumeParserService.
+    Core resume ingestion logic:
+    1. Parses resume text from PDF, DOCX, or TXT.
+    2. If Supabase is configured, extracts structured candidate details and persists
+       both original file and metadata with SHA-256 duplicate detection.
     """
-    filename = file.filename or "uploaded_resume.pdf"
     suffix = Path(filename).suffix.lower()
-
     if suffix not in (".pdf", ".docx", ".txt"):
         return JSONResponse(
             status_code=400,
@@ -112,7 +117,6 @@ async def upload_resume_file(file: UploadFile = File(...)):
     temp_dir.mkdir(parents=True, exist_ok=True)
     temp_path = temp_dir / filename
 
-    content = await file.read()
     with open(temp_path, "wb") as f:
         f.write(content)
 
@@ -125,15 +129,72 @@ async def upload_resume_file(file: UploadFile = File(...)):
             )
 
         text_to_return = cleaned_text or raw_text
-        return {
+        response_payload = {
             "success": True,
             "pathname": filename,
-            "contentType": file.content_type,
+            "contentType": content_type,
             "resumeText": text_to_return
         }
+
+        # Persistent storage integration
+        if is_supabase_configured():
+            try:
+                parsed_cand = adapter.nlp_extractor.extract_structured(
+                    candidate_id="temp_upload",
+                    source_file=filename,
+                    file_hash=file_hash,
+                    raw_text=raw_text or cleaned_text,
+                    cleaned_text=cleaned_text or raw_text
+                )
+
+                candidate_name = parsed_cand.name or "Not available"
+                candidate_role = parsed_cand.current_role or (
+                    parsed_cand.job_titles[0] if parsed_cand.job_titles else "Role not identified"
+                )
+
+                storage_res = store_resume(
+                    file_bytes=content,
+                    filename=filename,
+                    file_hash=file_hash,
+                    candidate_name=candidate_name,
+                    email=parsed_cand.email,
+                    resume_text=text_to_return,
+                    skills=parsed_cand.skills,
+                    job_role=candidate_role,
+                    content_type=content_type or "application/pdf"
+                )
+
+                response_payload.update({
+                    "candidateId": storage_res.get("candidateId"),
+                    "isDuplicate": storage_res.get("isDuplicate", False),
+                    "storageObjectPath": storage_res.get("storageObjectPath"),
+                    "candidateName": storage_res.get("candidateName"),
+                    "jobRole": storage_res.get("jobRole"),
+                })
+            except Exception as store_err:
+                logger.error(f"Failed to persist resume to Supabase: {store_err}", exc_info=True)
+                return JSONResponse(
+                    status_code=500,
+                    content={"error": f"Failed to persist resume storage: {str(store_err)}", "success": False}
+                )
+
+        return response_payload
     finally:
         if temp_path.exists():
             temp_path.unlink()
+
+
+@app.post("/api/files/upload")
+async def upload_resume_file(file: UploadFile = File(...)):
+    """
+    Implements the exact /api/files/upload endpoint expected by NewChatPage.tsx.
+    Extracts text from PDF, DOCX, and TXT using our layout-aware ATS ResumeParserService.
+    If Supabase is configured, persists the resume file in Supabase Storage and candidate
+    metadata in Supabase Postgres with SHA-256 duplicate detection.
+    """
+    filename = file.filename or "uploaded_resume.pdf"
+    content = await file.read()
+    return process_resume_upload(filename, content, file.content_type or "application/pdf")
 
 @app.post("/invocations")
 async def invocations_endpoint(request: Request):
