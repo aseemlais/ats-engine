@@ -134,3 +134,106 @@ def test_screening_adapter_returns_candidate_role_not_jd_title():
     assert res["currentRole"] == "Senior Machine Learning Engineer"
     assert res["jobRole"] == "Senior Machine Learning Engineer"
     assert res["currentRole"] != "Target JD Job Title - Senior Backend Architect"
+
+
+def test_tool_or_skill_not_selected_as_role():
+    extractor = NLPExtractorService()
+    text = """
+    Priya Patel
+    priya@example.com
+
+    SKILLS & TOOLS
+    Languages: Python, Java, C++
+    Tools: Jupyter Notebook, VS Code, Git, Docker, Postman
+
+    WORK EXPERIENCE
+    Generative AI Intern at Cognizant
+    01/2024 - Present
+    - Developed RAG systems using LangChain and Hugging Face transformers
+    """
+    parsed = extractor.extract_structured("cand_tool", "cand_tool.txt", "ht1", text, text)
+    assert parsed.current_role == "Generative AI Intern"
+    assert "Jupyter" not in parsed.current_role
+
+def test_employment_date_on_separate_line_not_selected():
+    extractor = NLPExtractorService()
+    text = """
+    Karthik Raman
+    karthik@example.com
+
+    INTERNSHIPS
+    Python Full Stack Intern, Emglitz Technologies
+    06/2025 – 06/2025
+    - Developed full stack web applications using Python, Django, React
+    """
+    parsed = extractor.extract_structured("cand_date", "cand_date.txt", "hd1", text, text)
+    assert parsed.current_role == "Python Full Stack Intern"
+    assert "2025" not in parsed.current_role
+
+def test_internship_with_company_and_title_on_separate_lines():
+    extractor = NLPExtractorService()
+    text = """
+    Sneha Reddy
+    sneha@example.com
+
+    INTERNSHIP
+    Embuzz Technologies Pvt Limited
+    Embedded Systems Internship
+    07/2024 – 08/2024
+    - Programmed microcontrollers in C
+    """
+    parsed = extractor.extract_structured("cand_sep", "cand_sep.txt", "hs1", text, text)
+    assert parsed.current_role == "Embedded Systems Intern"
+    assert "Embuzz" not in parsed.current_role
+    assert "2024" not in parsed.current_role
+
+def test_project_title_not_selected_over_internship():
+    extractor = NLPExtractorService()
+    text = """
+    Rohan Verma
+    rohan@example.com
+
+    ACADEMIC PROJECTS
+    Hand Gesture Recognition (01/2024 – 03/2024)
+    - Built a real-time gesture control pipeline using OpenCV and MediaPipe
+
+    INTERNSHIP EXPERIENCE
+    Data Science Intern at Innovate Analytics
+    05/2023 – 07/2023
+    - Performed customer segmentation and predictive modeling
+    """
+    parsed = extractor.extract_structured("cand_proj", "cand_proj.txt", "hp1", text, text)
+    assert parsed.current_role == "Data Science Intern"
+    assert "Hand Gesture" not in parsed.current_role
+
+def test_concatenated_company_title_academy_cleaned():
+    extractor = NLPExtractorService()
+    text = """
+    Vikas Krishnan
+    vikas@example.com
+
+    INTERNSHIPS
+    AI Fullstack Engineer Intern, Future Intern Private Limited, Vinsup Skill Academy
+    05/2024 - 07/2024
+    - Built AI-powered web applications
+    """
+    parsed = extractor.extract_structured("cand_concat", "cand_concat.txt", "hc1", text, text)
+    assert parsed.current_role == "AI Fullstack Engineer Intern"
+    assert "Future Intern" not in parsed.current_role
+    assert "Vinsup" not in parsed.current_role
+
+def test_multiple_internships_recency_selection():
+    extractor = NLPExtractorService()
+    text = """
+    Meera Nair
+    meera@example.com
+
+    INTERNSHIPS
+    Web Development Intern at CodeLabs
+    01/2023 - 03/2023
+
+    Machine Learning Intern at NeuralTech
+    06/2023 - 09/2023
+    """
+    parsed = extractor.extract_structured("cand_multi_int", "cand_multi_int.txt", "hm1", text, text)
+    assert parsed.current_role == "Machine Learning Intern"
