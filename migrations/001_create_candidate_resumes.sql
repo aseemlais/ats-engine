@@ -64,3 +64,11 @@ VALUES (
     ARRAY['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain']
 )
 ON CONFLICT (id) DO NOTHING;
+
+-- 6. Explicit schema permissions for PostgREST / service_role
+GRANT USAGE ON SCHEMA ai_chatbot TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL TABLES IN SCHEMA ai_chatbot TO postgres, anon, authenticated, service_role;
+GRANT ALL ON ALL SEQUENCES IN SCHEMA ai_chatbot TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA ai_chatbot GRANT ALL ON TABLES TO postgres, anon, authenticated, service_role;
+ALTER DEFAULT PRIVILEGES IN SCHEMA ai_chatbot GRANT ALL ON SEQUENCES TO postgres, anon, authenticated, service_role;
+

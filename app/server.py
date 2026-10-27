@@ -19,7 +19,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from app.adapters.screening_adapter import ATSScreeningAdapter
 from app.services.resume_parser import ResumeParserService
-from app.storage.supabase_client import is_supabase_configured
+from app.storage.supabase_client import is_supabase_configured, get_missing_supabase_env_vars
 from app.storage.resume_storage import store_resume, ResumePersistenceError
 
 logger = logging.getLogger("ats_server")
@@ -165,6 +165,7 @@ def process_resume_upload(
                 )
 
                 response_payload.update({
+                    "persistenceStatus": storage_res.get("persistenceStatus", "persisted"),
                     "candidateId": storage_res.get("candidateId"),
                     "isDuplicate": storage_res.get("isDuplicate", False),
                     "storageObjectPath": storage_res.get("storageObjectPath"),
@@ -172,11 +173,32 @@ def process_resume_upload(
                     "jobRole": storage_res.get("jobRole"),
                 })
             except Exception as store_err:
-                logger.error(f"Failed to persist resume to Supabase: {store_err}", exc_info=True)
+                logger.error(
+                    f"[Storage] Failed to persist resume '{filename}' (hash: {file_hash[:12]}...): {store_err}",
+                    exc_info=True,
+                )
                 return JSONResponse(
                     status_code=500,
-                    content={"error": f"Failed to persist resume storage: {str(store_err)}", "success": False}
+                    content={
+                        "success": False,
+                        "error": f"Failed to persist resume in Supabase: {str(store_err)}",
+                        "persistenceStatus": "failed",
+                        "pathname": filename,
+                    }
                 )
+        else:
+            missing_vars = get_missing_supabase_env_vars()
+            logger.warning(
+                "[Storage] Supabase persistent storage is not configured (missing: %s). Operating in temporary in-memory mode.",
+                ", ".join(missing_vars) if missing_vars else "unknown",
+            )
+            response_payload.update({
+                "persistenceStatus": "temporary_in_memory",
+                "candidateId": None,
+                "isDuplicate": False,
+                "storageObjectPath": None,
+                "persistenceNotice": f"Resume processed in temporary in-memory mode. Missing configuration: {', '.join(missing_vars)}.",
+            })
 
         return response_payload
     finally:

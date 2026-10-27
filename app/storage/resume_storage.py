@@ -29,12 +29,15 @@ class DatabaseError(ResumePersistenceError):
 
 
 def _get_table_ref(client: Any, table_name: str = "CandidateResume"):
-    """Helper to return table reference with schema 'ai_chatbot' if supported."""
+    """
+    Returns table reference, targeting the 'ai_chatbot' schema where CandidateResume resides.
+    Falls back to default schema if schema switching is not available.
+    """
     if hasattr(client, "schema"):
         try:
             return client.schema("ai_chatbot").table(table_name)
-        except Exception:
-            pass
+        except Exception as exc:
+            logger.warning(f"[Storage] Could not switch to schema 'ai_chatbot': {exc}")
     return client.table(table_name)
 
 
@@ -57,7 +60,7 @@ def check_duplicate_by_hash(file_hash: str, client: Optional[Any] = None) -> Opt
             return res.data[0]
         return None
     except Exception as exc:
-        logger.warning(f"Error querying duplicate candidate resume by hash {file_hash}: {exc}")
+        logger.warning(f"[Storage] Error querying duplicate candidate resume by hash {file_hash[:12]}...: {exc}")
         return None
 
 
@@ -88,7 +91,7 @@ def store_resume(
     # 1. Duplicate check
     existing = check_duplicate_by_hash(file_hash, client=supabase)
     if existing:
-        logger.info(f"Duplicate resume detected for hash {file_hash} (Candidate ID: {existing.get('id')})")
+        logger.info(f"[Storage] Duplicate resume detected for hash {file_hash[:12]}... (Candidate ID: {existing.get('id')})")
         return {
             "candidateId": str(existing.get("id")),
             "isDuplicate": True,
@@ -97,6 +100,7 @@ def store_resume(
             "jobRole": existing.get("jobRole") or "Role not identified",
             "email": existing.get("email"),
             "status": "existing_record_reused",
+            "persistenceStatus": "duplicate_reused",
         }
 
     # 2. Upload file to Supabase Storage
@@ -113,8 +117,11 @@ def store_resume(
             file_options={"content-type": content_type},
         )
     except Exception as exc:
-        logger.error(f"Failed to upload resume to storage path {storage_subpath}: {exc}")
-        raise StorageError(f"Storage upload failed: {exc}") from exc
+        err_msg = str(exc)
+        logger.error(f"[Storage] Failed to upload resume to storage path {storage_subpath}: {err_msg}")
+        if "bucket not found" in err_msg.lower():
+            raise StorageError(f"Storage bucket '{bucket_name}' not found in Supabase: {err_msg}") from exc
+        raise StorageError(f"Storage upload failed: {err_msg}") from exc
 
     # 3. Persist metadata record in Postgres
     record = {
@@ -133,14 +140,15 @@ def store_resume(
         table = _get_table_ref(supabase, "CandidateResume")
         table.insert(record).execute()
     except Exception as exc:
+        err_msg = str(exc)
         # Storage reconciliation: clean up orphaned file object
         logger.error(
-            f"Failed to insert candidate record: {exc}. Rolling back storage object {storage_subpath}"
+            f"[Storage] Failed to insert candidate record: {err_msg}. Rolling back storage object {storage_subpath}"
         )
         try:
             supabase.storage.from_(bucket_name).remove([storage_subpath])
         except Exception as cleanup_exc:
-            logger.warning(f"Failed to remove orphaned object {storage_subpath}: {cleanup_exc}")
+            logger.warning(f"[Storage] Failed to remove orphaned object {storage_subpath}: {cleanup_exc}")
 
         # Check for concurrent duplicate race condition
         existing_after_race = check_duplicate_by_hash(file_hash, client=supabase)
@@ -153,9 +161,10 @@ def store_resume(
                 "jobRole": existing_after_race.get("jobRole") or "Role not identified",
                 "email": existing_after_race.get("email"),
                 "status": "existing_record_reused_after_race_condition",
+                "persistenceStatus": "duplicate_reused",
             }
 
-        raise DatabaseError(f"Database insertion failed: {exc}") from exc
+        raise DatabaseError(f"Database insertion failed: {err_msg}") from exc
 
     return {
         "candidateId": candidate_id,
@@ -165,4 +174,5 @@ def store_resume(
         "jobRole": job_role or "Role not identified",
         "email": email,
         "status": "new_candidate_stored",
+        "persistenceStatus": "persisted",
     }
