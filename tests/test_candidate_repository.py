@@ -236,6 +236,96 @@ class TestSearchCandidates:
         assert result["limit"] == 5
         assert result["offset"] == 10
 
+    # ------------------------------------------------------------------
+    # Case-insensitive skills regression tests (bug fix)
+    # ------------------------------------------------------------------
+
+    def test_search_skills_uppercase_matches(self):
+        """'Python' (uppercase P) must match stored skill 'python' (lowercase)."""
+        rows = [_make_record({"skills": ["python", "fastapi"]})]
+        client, _, builder = self._build_search_client(rows)
+
+        result = search_candidates(query="Python", client=client)
+
+        assert len(result["candidates"]) == 1
+        # Confirm the or_ filter used lowercase for the cs term
+        or_calls = [str(c) for c in builder.or_.call_args_list]
+        assert any("python" in c for c in or_calls), (
+            f"Expected 'python' (lowercase) in or_ filter args, got: {or_calls}"
+        )
+
+    def test_search_skills_allcaps_matches(self):
+        """'PYTHON' (all caps) must match stored skill 'python' (lowercase)."""
+        rows = [_make_record({"skills": ["python", "fastapi"]})]
+        client, _, builder = self._build_search_client(rows)
+
+        result = search_candidates(query="PYTHON", client=client)
+
+        assert len(result["candidates"]) == 1
+        or_calls = [str(c) for c in builder.or_.call_args_list]
+        assert any("python" in c for c in or_calls)
+
+    def test_search_skills_lowercase_still_matches(self):
+        """'python' (lowercase) continues to work after the fix."""
+        rows = [_make_record({"skills": ["python", "fastapi"]})]
+        client, _, _ = self._build_search_client(rows)
+
+        result = search_candidates(query="python", client=client)
+
+        assert len(result["candidates"]) == 1
+
+    def test_search_skills_mixed_case_matches(self):
+        """'PyThOn' (mixed case) must match stored skill 'python' (lowercase)."""
+        rows = [_make_record({"skills": ["python"]})]
+        client, _, builder = self._build_search_client(rows)
+
+        result = search_candidates(query="PyThOn", client=client)
+
+        assert len(result["candidates"]) == 1
+        or_calls = [str(c) for c in builder.or_.call_args_list]
+        assert any("python" in c for c in or_calls)
+
+    def test_or_filter_uses_lowercase_cs_term(self):
+        """
+        Unit-level: verify the exact or_ filter string passed to PostgREST.
+        The cs term must always be lowercased; the ilike terms keep the
+        original query so that ilike (case-insensitive by design) still works.
+        """
+        client, _, builder = self._build_search_client([])
+
+        search_candidates(query="Django", client=client)
+
+        # or_ must have been called at least once (data + count queries)
+        assert builder.or_.called
+        first_call_arg = builder.or_.call_args_list[0][0][0]  # positional arg
+
+        # ilike branches keep the original query
+        assert "Django" in first_call_arg
+        # cs branch must use lowercase
+        assert '"django"' in first_call_arg
+        # Uppercase form must NOT appear in the cs part
+        # (it may appear in the ilike part, but not inside the cs.{} literal)
+        cs_part = first_call_arg.split("skills.cs.")[-1]
+        assert "Django" not in cs_part, (
+            f"cs term should be lowercase; got: {cs_part}"
+        )
+
+    def test_name_search_preserves_original_case_in_ilike(self):
+        """
+        ilike branches keep the original query string (ilike is already
+        case-insensitive; lowercasing is unnecessary and must not break
+        searches with uppercase letters in names).
+        """
+        rows = [_make_record({"candidateName": "Sreya Gupta"})]
+        client, _, builder = self._build_search_client(rows)
+
+        result = search_candidates(query="Sreya", client=client)
+
+        assert len(result["candidates"]) == 1
+        # The original query case must appear in the or_ filter for ilike
+        first_call_arg = builder.or_.call_args_list[0][0][0]
+        assert "Sreya" in first_call_arg
+
 
 # ---------------------------------------------------------------------------
 # 3. Get candidate by ID

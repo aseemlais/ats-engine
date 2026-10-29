@@ -136,9 +136,15 @@ def search_candidates(
     """
     Case-insensitive search across candidateName, email, jobRole, and skills.
 
-    Uses PostgREST ilike operator for text fields and the `cs` (contains)
-    operator for the skills TEXT[] array so all searches are parameterised
-    (no raw SQL interpolation).
+    Text columns (candidateName, email, jobRole) use PostgREST's ``ilike``
+    operator, which is natively case-insensitive.
+
+    The skills column is a TEXT[] array.  PostgREST's ``cs`` (array-contains)
+    operator is case-sensitive, so we normalise the query term to lowercase
+    before passing it to ``cs``.  This is safe because the extraction pipeline
+    (skill_normalizer.py) always stores skills in lowercase, so lowercasing the
+    search term gives a correct, parameterised, case-insensitive match without
+    any schema changes or unsafe SQL interpolation.
 
     Returns same shape as list_candidates.
     Raises:
@@ -155,19 +161,24 @@ def search_candidates(
     supabase = _require_client(client)
     table = _get_table_ref(supabase, "CandidateResume")
 
-    pattern = f"%{query}%"
+    # Skills are stored lowercase by the extraction pipeline; lowercase the
+    # search term so that cs (case-sensitive array-contains) matches correctly
+    # regardless of the case the caller supplies (e.g. "Python", "PYTHON", "python").
+    skills_term = query.lower()
+
+    def _or_filter(q: str) -> str:
+        return (
+            f'candidateName.ilike.%{q}%,'
+            f'email.ilike.%{q}%,'
+            f'jobRole.ilike.%{q}%,'
+            f'skills.cs.{{"{skills_term}"}}'
+        )
 
     try:
         # PostgREST OR filter: ilike across text columns, cs for array
-        # We build an OR across all searchable columns.
         data_res = (
             table.select(_LIST_COLUMNS)
-            .or_(
-                f'candidateName.ilike.{pattern},'
-                f'email.ilike.{pattern},'
-                f'jobRole.ilike.{pattern},'
-                f'skills.cs.{{"{query}"}}'
-            )
+            .or_(_or_filter(query))
             .order("createdAt", desc=True)
             .range(offset, offset + limit - 1)
             .execute()
@@ -177,12 +188,7 @@ def search_candidates(
         # Separate count query with the same filter
         count_res = (
             table.select("id", count="exact")
-            .or_(
-                f'candidateName.ilike.{pattern},'
-                f'email.ilike.{pattern},'
-                f'jobRole.ilike.{pattern},'
-                f'skills.cs.{{"{query}"}}'
-            )
+            .or_(_or_filter(query))
             .execute()
         )
         total = count_res.count if hasattr(count_res, "count") and count_res.count is not None else len(candidates)
