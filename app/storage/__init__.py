@@ -5,6 +5,16 @@ from app.storage.supabase_client import (
     get_missing_supabase_env_vars,
 )
 from app.storage.resume_storage import store_resume, check_duplicate_by_hash
+from app.storage.candidate_repository import (
+    list_candidates,
+    search_candidates,
+    get_candidate,
+    get_resume_download_url,
+    delete_candidate,
+    CandidateNotFoundError,
+    RepositoryUnavailableError,
+    PartialDeletionError,
+)
 
 __all__ = [
     "get_supabase_client",
@@ -12,4 +22,12 @@ __all__ = [
     "get_missing_supabase_env_vars",
     "store_resume",
     "check_duplicate_by_hash",
+    "list_candidates",
+    "search_candidates",
+    "get_candidate",
+    "get_resume_download_url",
+    "delete_candidate",
+    "CandidateNotFoundError",
+    "RepositoryUnavailableError",
+    "PartialDeletionError",
 ]

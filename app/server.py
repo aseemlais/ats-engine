@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional
 
 import uvicorn
-from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, Query
 from app.services.embedding_service import EmbeddingUnavailableError
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -20,7 +20,20 @@ if str(ROOT_DIR) not in sys.path:
 from app.adapters.screening_adapter import ATSScreeningAdapter
 from app.services.resume_parser import ResumeParserService
 from app.storage.supabase_client import is_supabase_configured, get_missing_supabase_env_vars
-from app.storage.resume_storage import store_resume, ResumePersistenceError
+from app.storage.resume_storage import store_resume, ResumePersistenceError, StorageError
+from app.storage.candidate_repository import (
+    list_candidates,
+    search_candidates,
+    get_candidate,
+    get_resume_download_url,
+    delete_candidate,
+    CandidateNotFoundError,
+    RepositoryUnavailableError,
+    PartialDeletionError,
+    DatabaseError,
+    DEFAULT_PAGE_SIZE,
+    MAX_PAGE_SIZE,
+)
 
 logger = logging.getLogger("ats_server")
 logging.basicConfig(level=logging.INFO)
@@ -217,6 +230,221 @@ async def upload_resume_file(file: UploadFile = File(...)):
     filename = file.filename or "uploaded_resume.pdf"
     content = await file.read()
     return process_resume_upload(filename, content, file.content_type or "application/pdf")
+
+
+# =============================================================================
+# Batch 2: Candidate Repository API
+# =============================================================================
+
+def _supabase_required():
+    """Return 503 JSON if Supabase is not configured."""
+    if not is_supabase_configured():
+        missing = get_missing_supabase_env_vars()
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Candidate repository is unavailable: Supabase not configured.",
+                "missingConfig": missing,
+            },
+        )
+
+
+def _require_delete_auth(request: Request) -> None:
+    """
+    Guard for destructive (DELETE) endpoints.
+
+    Checks the `Authorization: Bearer <token>` header against the
+    `ATS_ADMIN_TOKEN` environment variable on the backend.
+
+    Security model:
+      - ATS_ADMIN_TOKEN must be set as a secret env var on the HF Space backend.
+      - The Render Node.js proxy should forward the token in an
+        `Authorization: Bearer` header when calling DELETE /api/candidates/{id}.
+      - If ATS_ADMIN_TOKEN is not set, the endpoint is disabled (503) to prevent
+        unauthenticated destructive access in any deployment.
+      - CORS and the Supabase service-role key are NOT used as user auth.
+      - This token protects the Python backend's direct URL; the Node.js
+        frontend's own authMiddleware provides a separate layer on the proxy side.
+
+    Frontend configuration required (Render env or Node proxy):
+      Forward the header:  Authorization: Bearer <ATS_ADMIN_TOKEN value>
+      Env var name on HF Space: ATS_ADMIN_TOKEN
+    """
+    configured_token = os.environ.get("ATS_ADMIN_TOKEN", "").strip()
+    if not configured_token:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": "Destructive operations are disabled: ATS_ADMIN_TOKEN is not configured on this deployment.",
+                "action": "Set ATS_ADMIN_TOKEN as a secret environment variable on the backend to enable candidate deletion.",
+            },
+        )
+
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header.startswith("Bearer "):
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "Authorization header with Bearer token is required for this operation."},
+        )
+
+    provided_token = auth_header[len("Bearer "):]
+    # Constant-time comparison to prevent timing attacks
+    import hmac
+    if not hmac.compare_digest(provided_token, configured_token):
+        raise HTTPException(
+            status_code=403,
+            detail={"error": "Invalid admin token."},
+        )
+
+
+@app.get("/api/candidates")
+async def list_candidates_endpoint(
+    limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0),
+):
+    """
+    List stored candidates with pagination, sorted by newest first.
+    Does not return full resume text or internal credentials.
+    """
+    _supabase_required()
+    try:
+        result = list_candidates(limit=limit, offset=offset)
+        return result
+    except RepositoryUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except DatabaseError as exc:
+        logger.error("[API] list_candidates error: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to retrieve candidates.")
+
+
+@app.get("/api/candidates/search")
+async def search_candidates_endpoint(
+    q: str = Query(default="", description="Search query (name, email, skills, job role)"),
+    limit: int = Query(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE),
+    offset: int = Query(default=0, ge=0),
+):
+    """
+    Case-insensitive search across candidateName, email, jobRole, and skills.
+    Returns paginated results. Empty query returns all candidates (same as list).
+    """
+    _supabase_required()
+    try:
+        result = search_candidates(query=q, limit=limit, offset=offset)
+        return result
+    except RepositoryUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except DatabaseError as exc:
+        logger.error("[API] search_candidates error (q=%r): %s", q, exc)
+        raise HTTPException(status_code=500, detail="Search failed.")
+
+
+@app.get("/api/candidates/{candidate_id}")
+async def get_candidate_endpoint(
+    candidate_id: str,
+    include_resume_text: bool = Query(default=False),
+):
+    """
+    Retrieve a single candidate's metadata by UUID.
+    Set include_resume_text=true to also return the full extracted resume text.
+    """
+    _supabase_required()
+    try:
+        candidate = get_candidate(candidate_id, include_resume_text=include_resume_text)
+        return candidate
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except CandidateNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Candidate '{candidate_id}' not found.")
+    except RepositoryUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except DatabaseError as exc:
+        logger.error("[API] get_candidate(%s) error: %s", candidate_id, exc)
+        raise HTTPException(status_code=500, detail="Failed to retrieve candidate.")
+
+
+@app.get("/api/candidates/{candidate_id}/download")
+async def get_candidate_download_url_endpoint(candidate_id: str):
+    """
+    Generate a short-lived signed URL (5 min TTL) for the candidate's resume file.
+    The service-role key is never exposed; permanent public links are not issued.
+    """
+    _supabase_required()
+    try:
+        url = get_resume_download_url(candidate_id)
+        return {"signedUrl": url, "expiresInSeconds": 300}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except CandidateNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Candidate '{candidate_id}' not found.")
+    except RepositoryUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except Exception as exc:
+        logger.error("[API] get_candidate_download_url(%s) error: %s", candidate_id, exc)
+        raise HTTPException(status_code=500, detail="Failed to generate download URL.")
+
+
+@app.delete("/api/candidates/{candidate_id}")
+async def delete_candidate_endpoint(candidate_id: str, request: Request):
+    """
+    Delete a candidate's storage file and metadata record.
+
+    Authorization: requires `Authorization: Bearer <ATS_ADMIN_TOKEN>` header.
+    ATS_ADMIN_TOKEN must be set as a secret env var on the HF Space backend.
+
+    Deletion order:
+      1. Storage object is deleted first.
+         - If Storage deletion fails, returns 409 with the error; the DB row is
+           untouched and the operation is safe to retry.
+         - If the Storage object is already absent, deletion proceeds normally.
+      2. DB row is deleted after Storage succeeds.
+         - If DB deletion fails after Storage was removed, returns 207 (partial
+           failure) with enough detail to identify and clean up the orphaned row.
+    """
+    _require_delete_auth(request)
+    _supabase_required()
+    try:
+        result = delete_candidate(candidate_id)
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except CandidateNotFoundError:
+        raise HTTPException(status_code=404, detail=f"Candidate '{candidate_id}' not found.")
+    except RepositoryUnavailableError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    except PartialDeletionError as exc:
+        # Storage was deleted but DB row could not be removed.
+        # Return 207 Multi-Status so the caller knows the state precisely.
+        logger.error("[API] Partial deletion for candidate %s: %s", candidate_id, exc)
+        return JSONResponse(
+            status_code=207,
+            content={
+                "deleted": False,
+                "partialFailure": True,
+                "candidateId": candidate_id,
+                "storageDeleted": True,
+                "storageAlreadyAbsent": False,
+                "dbRowDeleted": False,
+                "storageObjectPath": exc.storage_object_path,
+                "error": (
+                    "Storage file was deleted but the database row could not be removed. "
+                    "Retry the DELETE request; the storage step will be skipped automatically."
+                ),
+            },
+        )
+    except StorageError as exc:
+        # Storage deletion failed — DB row is intact, operation is safe to retry.
+        logger.error("[API] Storage deletion failed for candidate %s: %s", candidate_id, exc)
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "Could not delete the resume file from storage. The candidate record is intact and the operation is safe to retry.",
+                "detail": str(exc),
+            },
+        )
+    except DatabaseError as exc:
+        logger.error("[API] delete_candidate(%s) DB error: %s", candidate_id, exc)
+        raise HTTPException(status_code=500, detail="Failed to delete candidate record.")
+
 
 @app.post("/invocations")
 async def invocations_endpoint(request: Request):
