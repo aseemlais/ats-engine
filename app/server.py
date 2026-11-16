@@ -497,10 +497,6 @@ async def invocations_endpoint(request: Request):
             resume_text=parsed_input["resume_text"]
         )
         final_text = json.dumps(result_dict)
-    elif "json schema" in user_prompt.lower() or ("extract" in user_prompt.lower() and "email" in user_prompt.lower()):
-        # AI-powered structured extraction request via /invocations
-        extracted = structured_extractor.extract(user_prompt)
-        final_text = json.dumps(extracted)
     else:
         # Standard candidate screening request
         parsed_input = adapter.parse_screening_prompt(user_prompt)
