@@ -2,6 +2,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Dict, List, Optional, Tuple
+import ftfy
 
 from app.models.resume import EducationEntry, ExperienceEntry, ParsedResume
 from app.utils.hash_utils import compute_text_hash
@@ -184,8 +185,10 @@ class NLPExtractorService:
 
     def extract_name(self, text: str) -> str:
         """Heuristic name extraction from the header of the resume."""
-        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        fixed_text = ftfy.fix_text(text)
+        lines = [line.strip() for line in fixed_text.splitlines() if line.strip()]
         for line in lines[:8]:
+            line = re.sub(r"^['\"]+|['\"]+$", "", line).strip()
             # Filter out lines that look like emails, URLs, phones, or section headings
             if "@" in line or "http" in line or len(line) > 50 or re.search(r"\+?\d{10}", line):
                 continue
@@ -200,10 +203,18 @@ class NLPExtractorService:
         return "Unknown"
 
     def extract_contact(self, text: str) -> Tuple[Optional[str], Optional[str]]:
-        email_match = EMAIL_RE.search(text)
-        email = email_match.group(0) if email_match else None
+        text_fixed = ftfy.fix_text(text)
+        email_match = EMAIL_RE.search(text_fixed)
+        email = None
+        if email_match:
+            candidate_email = email_match.group(0).strip()
+            # Strictly forbid placeholder em-dashes ('—', '–', '-'), blank or placeholder strings
+            if candidate_email not in ("—", "–", "-", "None", "null", "Not available") and "@" in candidate_email:
+                candidate_email = re.sub(r"^[\s<(\['\"]+|[\s>)\]'\"]+$", "", candidate_email).strip()
+                if EMAIL_RE.match(candidate_email):
+                    email = candidate_email
 
-        phone_match = PHONE_RE.search(text)
+        phone_match = PHONE_RE.search(text_fixed)
         phone = phone_match.group(0) if phone_match else None
 
         return email, phone
@@ -1045,6 +1056,17 @@ class NLPExtractorService:
             degrees=degrees,
             skills=skills
         )
+
+        # Clean name, role, and job titles removing residual encoding artifacts and empty quotes
+        name = ftfy.fix_text(name).strip("'\" ")
+        if not name or name in ("—", "–", "-"):
+            name = "Unknown"
+
+        role = ftfy.fix_text(role).strip("'\" ")
+        if not role or role in ("—", "–", "-"):
+            role = "Role not identified"
+
+        job_titles = [ftfy.fix_text(t).strip("'\" ") for t in job_titles if t and ftfy.fix_text(t).strip("'\" ")]
 
         text_hash = compute_text_hash(cleaned_text)
 

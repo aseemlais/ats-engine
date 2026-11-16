@@ -2,6 +2,7 @@ import re
 import json
 import logging
 from typing import Dict, Any, List
+import ftfy
 
 from app.models.resume import ParsedResume
 from app.models.job import JobDescription
@@ -191,13 +192,31 @@ class ATSScreeningAdapter:
         if not relevant_exp:
             relevant_exp = [l.strip("- ") for l in parsed_resume.section_texts.get("internship", "").splitlines() if len(l.strip()) > 10][:4]
 
+        # Clean email: strictly forbid placeholder em-dashes ('—', '–', '-'), blank or corrupted strings
+        clean_email = None
+        if parsed_resume.email:
+            cand_email = ftfy.fix_text(str(parsed_resume.email)).strip()
+            if cand_email not in ("—", "–", "-", "null", "none", "None", "Not available", "N/A", ""):
+                m = re.search(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", cand_email)
+                if m:
+                    clean_email = m.group(0)
+
+        # Clean candidateName and currentRole removing any residual encoding artifacts
+        raw_name = ftfy.fix_text(parsed_resume.name or "").strip("'\" ")
+        clean_name = raw_name if raw_name and raw_name not in ("—", "–", "-") else "Not available"
+
+        raw_role = parsed_resume.current_role or (parsed_resume.job_titles[0] if parsed_resume.job_titles else (job_title or ""))
+        clean_role = ftfy.fix_text(str(raw_role)).strip("'\" ")
+        if not clean_role or clean_role in ("—", "–", "-"):
+            clean_role = "Role not identified"
+
         # Structure payload strictly adhering to ScreeningResult expected by NewChatPage.tsx
         return {
-            "candidateName": parsed_resume.name or "Not available",
-            "email": parsed_resume.email or "Not available",
+            "candidateName": clean_name,
+            "email": clean_email or "Not available",
             "phone": parsed_resume.phone or "Not available",
-            "currentRole": parsed_resume.current_role or (parsed_resume.job_titles[0] if parsed_resume.job_titles else "Role not identified"),
-            "jobRole": parsed_resume.current_role or (parsed_resume.job_titles[0] if parsed_resume.job_titles else "Role not identified"),
+            "currentRole": clean_role,
+            "jobRole": clean_role,
             "experience": exp_str,
             "skills": parsed_resume.skills,
             "educationDetails": edu_str,

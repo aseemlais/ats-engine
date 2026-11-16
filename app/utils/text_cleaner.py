@@ -1,5 +1,6 @@
 import re
 import unicodedata
+import ftfy
 
 # Bump whenever tokenize_for_bm25 changes: a persisted index built with another version is stale and must be rebuilt.
 TOKENIZER_VERSION = 2   # v2: compound skills (ci/cd, pl/sql, tcp/ip, power bi), context-gated R/C, spelling aliases
@@ -14,6 +15,9 @@ def clean_text(text: str) -> str:
     """Cleans resume text while preserving technical terminology and section headers."""
     if not text:
         return ""
+    
+    # Fix binary-to-text decoding artifacts, mojibake, and encoding glitches
+    text = ftfy.fix_text(text)
     
     # Normalize unicode (decompose ligatures like fi -> f i, normalize accents)
     text = unicodedata.normalize("NFKD", text)

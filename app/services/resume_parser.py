@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Tuple, Optional
 import fitz  # PyMuPDF
 from docx import Document
+import ftfy
 
 from app.utils.text_cleaner import clean_text
 from app.utils.file_validator import validate_resume_file
@@ -13,7 +14,8 @@ class ResumeParserService:
         self.max_size_mb = max_size_mb
 
     def extract_text_from_pdf(self, file_path: Path | str) -> str:
-        """Extracts text from PDF using PyMuPDF (fitz) with layout-aware blocks sorted in reading order."""
+        """Extracts text from PDF using PyMuPDF (fitz) with layout-aware blocks sorted in reading order,
+        normalized with ftfy to fix binary-to-text decoding artifacts and encoding glitches."""
         doc = fitz.open(str(file_path))
         extracted_pages = []
         for page_idx in range(len(doc)):
@@ -24,7 +26,8 @@ class ResumeParserService:
             page_text = "\n".join(b[4].strip() for b in sorted_blocks if len(b) > 4 and b[4].strip())
             extracted_pages.append(page_text)
         doc.close()
-        return "\n".join(extracted_pages)
+        raw_text = "\n".join(extracted_pages)
+        return ftfy.fix_text(raw_text)
 
     def extract_text_from_docx(self, file_path: Path | str) -> str:
         """Extracts text from DOCX files including paragraphs and table contents."""
@@ -72,6 +75,8 @@ class ResumeParserService:
             if not raw_text.strip():
                 return False, None, None, file_hash, "Extracted text is empty (scanned image or empty document)"
 
+            # Ensure all raw text has binary-to-text decoding artifacts fixed before any downstream processing
+            raw_text = ftfy.fix_text(raw_text)
             cleaned_text = clean_text(raw_text)
             return True, raw_text, cleaned_text, file_hash, None
 

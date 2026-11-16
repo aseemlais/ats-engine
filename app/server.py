@@ -19,6 +19,7 @@ if str(ROOT_DIR) not in sys.path:
 
 from app.adapters.screening_adapter import ATSScreeningAdapter
 from app.services.resume_parser import ResumeParserService
+from app.services.structured_extractor import StructuredResumeExtractor
 from app.storage.supabase_client import is_supabase_configured, get_missing_supabase_env_vars
 from app.storage.resume_storage import store_resume, ResumePersistenceError, StorageError
 from app.storage.candidate_repository import (
@@ -54,6 +55,7 @@ REF_CLIENT_DIST = Path(r"C:\Users\LENOVO\Downloads\Resume Screening and Shortlis
 
 adapter = ATSScreeningAdapter()
 parser = ResumeParserService()
+structured_extractor = StructuredResumeExtractor(nlp_extractor=adapter.nlp_extractor)
 
 @app.get("/")
 def root():
@@ -152,27 +154,36 @@ def process_resume_upload(
         # Persistent storage integration
         if is_supabase_configured():
             try:
-                parsed_cand = adapter.nlp_extractor.extract_structured(
-                    candidate_id="temp_upload",
-                    source_file=filename,
-                    file_hash=file_hash,
+                # AI-powered structured extraction using Databricks schema prompt & deterministic fallback
+                extracted = structured_extractor.extract(
                     raw_text=raw_text or cleaned_text,
                     cleaned_text=cleaned_text or raw_text
                 )
 
-                candidate_name = parsed_cand.name or "Not available"
-                candidate_role = parsed_cand.current_role or (
-                    parsed_cand.job_titles[0] if parsed_cand.job_titles else "Role not identified"
-                )
+                candidate_name = extracted.get("candidateName") or "Unknown"
+                candidate_role = extracted.get("jobTitle") or "Role not identified"
+                email = extracted.get("email")  # strictly valid email or None (no em-dashes or blank strings)
+                skills = extracted.get("skills")
+
+                # Fallback to deterministic NLP skills if empty
+                if not skills:
+                    parsed_cand = adapter.nlp_extractor.extract_structured(
+                        candidate_id="temp_upload",
+                        source_file=filename,
+                        file_hash=file_hash,
+                        raw_text=raw_text or cleaned_text,
+                        cleaned_text=cleaned_text or raw_text
+                    )
+                    skills = parsed_cand.skills
 
                 storage_res = store_resume(
                     file_bytes=content,
                     filename=filename,
                     file_hash=file_hash,
                     candidate_name=candidate_name,
-                    email=parsed_cand.email,
+                    email=email,
                     resume_text=text_to_return,
-                    skills=parsed_cand.skills,
+                    skills=skills or [],
                     job_role=candidate_role,
                     content_type=content_type or "application/pdf"
                 )
@@ -486,6 +497,10 @@ async def invocations_endpoint(request: Request):
             resume_text=parsed_input["resume_text"]
         )
         final_text = json.dumps(result_dict)
+    elif "json schema" in user_prompt.lower() or ("extract" in user_prompt.lower() and "email" in user_prompt.lower()):
+        # AI-powered structured extraction request via /invocations
+        extracted = structured_extractor.extract(user_prompt)
+        final_text = json.dumps(extracted)
     else:
         # Standard candidate screening request
         parsed_input = adapter.parse_screening_prompt(user_prompt)
