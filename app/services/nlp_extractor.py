@@ -698,7 +698,7 @@ class NLPExtractorService:
         t = PRESENT_RE.sub("", t)
         t = re.sub(r"[\(\[\{][\s\-\–]*[\)\]\}]", "", t)
         t = re.sub(r"^(?:role|position|designation|job\s+title|worked\s+as|working\s+as)\s*[:\-–—]\s*", "", t, flags=re.I)
-        t = t.strip(" \t\n\r,.:;|–-—()[]{}")
+        t = t.strip(" \t\n\r,.:;|–-—")  # Preserve () so parens in job titles (e.g. TypeScript / Node.js / React) are not stripped
 
         if not t or is_date_or_interval(t) or is_tool_or_skill(t):
             return "", None
@@ -729,13 +729,13 @@ class NLPExtractorService:
                     score += 20 * role_word_count
                 elif is_comp:
                     score -= 15
-                scored.append((score, s_clean, is_comp))
+                scored.append((score, s, s_clean, is_comp))  # s=original, s_clean=stripped for scoring
 
             scored.sort(key=lambda x: x[0], reverse=True)
             if scored and scored[0][0] > 0:
-                title_cand = scored[0][1]
+                title_cand = scored[0][1].strip(" \t\n\r,.:;")  # original segment, only whitespace/punct stripped
 
-            for score, seg, is_c in scored:
+            for score, seg, _seg_clean, is_c in scored:
                 if is_c and seg != title_cand:
                     company_cand = seg
                     break
@@ -747,7 +747,7 @@ class NLPExtractorService:
             elif is_company_entity(t):
                 company_cand = t
 
-        title_cand = title_cand.strip(" \t\n\r,.:;|–-—()[]{}")
+        title_cand = title_cand.strip(" \t\n\r,.:;|–-—")  # Preserve () so closing parens in titles are kept
         if is_date_or_interval(title_cand) or is_tool_or_skill(title_cand) or is_company_entity(title_cand) or is_project_title(title_cand):
             title_cand = ""
 
