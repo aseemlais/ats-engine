@@ -20,6 +20,8 @@ if str(ROOT_DIR) not in sys.path:
 from app.adapters.screening_adapter import ATSScreeningAdapter
 from app.services.resume_parser import ResumeParserService
 from app.services.structured_extractor import StructuredResumeExtractor
+from app.services.extraction_service import ExtractionService
+from app.adapters.extraction_adapter import ExtractionAdapter
 from app.storage.supabase_client import is_supabase_configured, get_missing_supabase_env_vars
 from app.storage.resume_storage import store_resume, ResumePersistenceError, StorageError
 from app.storage.candidate_repository import (
@@ -56,6 +58,19 @@ REF_CLIENT_DIST = Path(r"C:\Users\LENOVO\Downloads\Resume Screening and Shortlis
 adapter = ATSScreeningAdapter()
 parser = ResumeParserService()
 structured_extractor = StructuredResumeExtractor(nlp_extractor=adapter.nlp_extractor)
+extraction_service = ExtractionService(fallback_extractor=structured_extractor)
+extraction_adapter = ExtractionAdapter(
+    extraction_service=extraction_service,
+    legacy_extractor=structured_extractor,
+)
+
+@app.on_event("startup")
+async def startup_event():
+    await extraction_service.start()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    await extraction_service.stop()
 
 @app.get("/")
 def root():
@@ -154,8 +169,8 @@ def process_resume_upload(
         # Persistent storage integration
         if is_supabase_configured():
             try:
-                # AI-powered structured extraction using Databricks schema prompt & deterministic fallback
-                extracted = structured_extractor.extract(
+                # Structured extraction using the feature-flagged adapter (SLM if enabled, with safe fallback)
+                extracted = extraction_adapter.extract(
                     raw_text=raw_text or cleaned_text,
                     cleaned_text=cleaned_text or raw_text
                 )
@@ -455,6 +470,55 @@ async def delete_candidate_endpoint(candidate_id: str, request: Request):
     except DatabaseError as exc:
         logger.error("[API] delete_candidate(%s) DB error: %s", candidate_id, exc)
         raise HTTPException(status_code=500, detail="Failed to delete candidate record.")
+
+
+@app.post("/extract")
+async def extract_resume_endpoint(
+    file: UploadFile = File(...),
+):
+    """
+    Submits a resume file for async structured extraction:
+    - If file_hash is already cached in Supabase: returns 200 with cached payload immediately.
+    - If extraction queue is full: returns 429 Too Many Requests.
+    - Otherwise: returns 202 Accepted with job_id for polling.
+    """
+    try:
+        content = await file.read()
+        if not content:
+            raise HTTPException(status_code=400, detail="Uploaded file is empty.")
+
+        status_code, response_data = await extraction_service.submit_job(
+            file_bytes=content,
+            filename=file.filename or "uploaded_resume.pdf",
+            content_type=file.content_type or "application/pdf",
+        )
+        return JSONResponse(status_code=status_code, content=response_data)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.error("[API] /extract error: %s", exc, exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to submit extraction job: {str(exc)}")
+
+
+@app.get("/jobs/{job_id}")
+async def get_job_status_endpoint(job_id: str):
+    """
+    Polls the status of an asynchronous resume extraction job.
+    Returns: status ('pending', 'processing', 'completed', 'failed') and result payload when complete.
+    """
+    job = extraction_service.get_job(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    return {
+        "job_id": job["id"],
+        "status": job["status"],
+        "extractionSource": job.get("extractionSource"),
+        "result": job.get("result"),
+        "error": job.get("error"),
+        "created_at": job.get("created_at"),
+        "updated_at": job.get("updated_at"),
+    }
 
 
 @app.post("/invocations")
