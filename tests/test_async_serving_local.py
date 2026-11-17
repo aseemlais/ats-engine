@@ -72,6 +72,47 @@ def test_local_extraction_service_queue_and_worker():
     asyncio.run(_run())
 
 
+def test_local_extraction_service_auto_starts_worker_on_submit():
+    """
+    Validates that if submit_job is called without prior service.start(),
+    ensure_worker() automatically spins up the background worker on the active loop
+    and processes the pending job to 'completed'.
+    """
+    async def _run():
+        fresh_service = ExtractionService(max_queue_size=5)
+        # Note: We deliberately do NOT call fresh_service.start()
+        sample_resume = (
+            b"MICHAEL SCOTT\n"
+            b"Regional Manager | michael@dundermifflin.com | +1-570-555-0100\n"
+            b"EXPERIENCE\n"
+            b"Regional Manager - Dunder Mifflin Paper Company | 2005 - 2013\n"
+            b"SKILLS\n"
+            b"Sales, Negotiation, Management\n"
+        )
+        code, resp = await fresh_service.submit_job(sample_resume, "michael.txt", "text/plain")
+        assert code == 202
+        job_id = resp["job_id"]
+
+        # Verify worker was started automatically
+        assert fresh_service.running is True
+        assert fresh_service.worker_task is not None
+
+        # Wait for worker to finish
+        for _ in range(50):
+            await asyncio.sleep(0.1)
+            job = fresh_service.get_job(job_id)
+            if job and job["status"] in ("completed", "failed"):
+                break
+
+        job = fresh_service.get_job(job_id)
+        assert job is not None
+        assert job["status"] == "completed", f"Job remained stuck or failed: {job}"
+        assert job["result"]["candidateName"] == "Michael Scott"
+        await fresh_service.stop()
+
+    asyncio.run(_run())
+
+
 def test_local_extraction_service_queue_capacity_429():
     """
     Validates that when the bounded queue is filled to capacity,

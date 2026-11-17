@@ -5,6 +5,7 @@ import json
 import logging
 import os
 from pathlib import Path
+import re
 import sys
 import tempfile
 import uuid
@@ -78,9 +79,27 @@ class ExtractionService:
             logger.warning("[ExtractionService] Failed loading llama_cpp model: %s. Using fallback mode.", exc)
             self.llm = None
 
+    async def ensure_worker(self) -> None:
+        """
+        Guarantees that the queue is initialized and the worker task is active
+        on the running event loop. Starts or restarts the worker if it was never
+        started or ended unexpectedly.
+        """
+        if self._queue is None:
+            self._queue = asyncio.Queue(maxsize=self.max_queue_size)
+
+        if not self.running or self.worker_task is None or self.worker_task.done():
+            logger.info("[ExtractionService] Worker is inactive or terminated. Spawning background worker task...")
+            self.running = True
+            if not self.llm:
+                self.load_model()
+            self.worker_task = asyncio.create_task(self._worker_loop(), name="ats_extraction_worker")
+            logger.info("[ExtractionService] Background worker task spawned: %s", self.worker_task.get_name())
+
     async def start(self) -> None:
         """Starts the single background worker task and loads the model."""
-        if self.running:
+        if self.running and self.worker_task and not self.worker_task.done():
+            logger.info("[ExtractionService] Async extraction worker is already running.")
             return
         if self._queue is None:
             self._queue = asyncio.Queue(maxsize=self.max_queue_size)
@@ -153,6 +172,9 @@ class ExtractionService:
         - If queue is saturated: returns (429, error_payload).
         - Otherwise: creates job, enqueues it, and returns (202, job_metadata).
         """
+        # Ensure the worker task is active and listening to the queue
+        await self.ensure_worker()
+
         file_hash = hashlib.sha256(file_bytes).hexdigest()
 
         # 1. Check Supabase cache for duplicate/reused files
@@ -247,82 +269,139 @@ class ExtractionService:
 
     async def _worker_loop(self) -> None:
         """Single background worker loop processing jobs sequentially."""
-        logger.info("[ExtractionService] Worker loop running...")
+        logger.info("[ExtractionService] Worker loop running and waiting for jobs...")
         while self.running:
             try:
-                job_id, file_bytes, filename, content_type = await self.queue.get()
-            except asyncio.CancelledError:
-                break
+                try:
+                    job_id, file_bytes, filename, content_type = await self.queue.get()
+                except asyncio.CancelledError:
+                    logger.info("[ExtractionService] Worker loop received cancellation. Exiting.")
+                    break
 
-            if job_id not in self.jobs:
-                self.queue.task_done()
-                continue
-
-            job = self.jobs[job_id]
-            job["status"] = "processing"
-            job["updated_at"] = datetime.utcnow().isoformat()
-            logger.info("[ExtractionService] Processing job %s (%s)...", job_id, filename)
-
-            temp_file_path = None
-            try:
-                # 1. Parse text from document bytes via temporary file
-                suffix = Path(filename).suffix if filename else ".pdf"
-                if not suffix:
-                    suffix = ".pdf"
-                with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
-                    tmp.write(file_bytes)
-                    temp_file_path = tmp.name
-
-                success, raw_text, cleaned_text, file_hash, err = self.parser.parse_file(temp_file_path)
-                if not success or not (raw_text or cleaned_text):
-                    job["status"] = "failed"
-                    job["error"] = err or "Failed to extract text from document."
-                    job["updated_at"] = datetime.utcnow().isoformat()
+                if job_id not in self.jobs:
+                    logger.warning("[ExtractionService] Dequeued job_id %s not in jobs registry.", job_id)
+                    self.queue.task_done()
                     continue
 
-                text_to_extract = raw_text or cleaned_text
-
-                # 2. Run model inference in thread (keeps event loop responsive)
-                raw_extracted = await asyncio.to_thread(self._infer_llm, text_to_extract)
-
-                # 3. Deterministic Post-Processing
-                if raw_extracted:
-                    processed = post_process_resume(raw_extracted)
-                    extraction_source = "slm"
-                else:
-                    # Safe deterministic fallback if model is not loaded or failed
-                    if self._fallback_extractor is None:
-                        from app.services.structured_extractor import StructuredResumeExtractor
-                        self._fallback_extractor = StructuredResumeExtractor()
-                    fallback_data = self._fallback_extractor.get_safe_fallback_structure(text_to_extract)
-                    processed = post_process_resume(fallback_data)
-                    extraction_source = "fallback"
-
-                dumped_result = processed.model_dump(by_alias=True)
-                dumped_result["extractionSource"] = extraction_source
-
-                job["status"] = "completed"
-                job["result"] = dumped_result
-                job["extractionSource"] = extraction_source
+                job = self.jobs[job_id]
+                job["status"] = "processing"
                 job["updated_at"] = datetime.utcnow().isoformat()
                 logger.info(
-                    "[ExtractionService] Job %s (%s) completed successfully via source='%s'. Candidate: '%s', Role: '%s'",
+                    "[ExtractionService] [Queue Picked Up] Starting processing for job %s (file: '%s', size: %d bytes). Remaining queue depth: %d",
                     job_id,
                     filename,
-                    extraction_source,
-                    dumped_result.get("candidateName"),
-                    dumped_result.get("jobTitle"),
+                    len(file_bytes),
+                    self.queue.qsize(),
                 )
 
-            except Exception as exc:
-                logger.error("[ExtractionService] Job %s encountered error: %s", job_id, exc, exc_info=True)
-                job["status"] = "failed"
-                job["error"] = str(exc)
-                job["updated_at"] = datetime.utcnow().isoformat()
-            finally:
-                if temp_file_path and os.path.exists(temp_file_path):
-                    try:
-                        os.remove(temp_file_path)
-                    except OSError:
-                        pass
-                self.queue.task_done()
+                temp_file_path = None
+                try:
+                    # 1. Parse text from document bytes via temporary file
+                    suffix = Path(filename).suffix if filename else ".pdf"
+                    if not suffix:
+                        suffix = ".pdf"
+                    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+                        tmp.write(file_bytes)
+                        temp_file_path = tmp.name
+
+                    logger.info("[ExtractionService] [Parsing] Parsing document text for job %s...", job_id)
+                    success, raw_text, cleaned_text, file_hash, err = self.parser.parse_file(temp_file_path)
+                    if not success or not (raw_text or cleaned_text):
+                        logger.warning("[ExtractionService] [Failed] Job %s text extraction failed: %s", job_id, err)
+                        job["status"] = "failed"
+                        job["error"] = err or "Failed to extract text from document."
+                        job["updated_at"] = datetime.utcnow().isoformat()
+                        continue
+
+                    text_to_extract = raw_text or cleaned_text
+                    logger.info(
+                        "[ExtractionService] [Extracting] Extracted %d chars of text for job %s. Running structured extraction...",
+                        len(text_to_extract),
+                        job_id,
+                    )
+
+                    # 2. Run model inference in thread (keeps event loop responsive)
+                    raw_extracted = await asyncio.to_thread(self._infer_llm, text_to_extract)
+
+                    # 3. Deterministic Post-Processing
+                    if raw_extracted:
+                        processed = post_process_resume(raw_extracted)
+                        extraction_source = "slm"
+                    else:
+                        # Safe deterministic fallback if model is not loaded or failed
+                        if self._fallback_extractor is None:
+                            from app.services.structured_extractor import StructuredResumeExtractor
+                            self._fallback_extractor = StructuredResumeExtractor()
+                        fallback_data = self._fallback_extractor.get_safe_fallback_structure(text_to_extract)
+                        processed = post_process_resume(fallback_data)
+                        extraction_source = "fallback"
+
+                    dumped_result = processed.model_dump(by_alias=True)
+                    dumped_result["extractionSource"] = extraction_source
+
+                    # 4. Optional: If Supabase is configured, persist candidate resume to Supabase
+                    if is_supabase_configured():
+                        try:
+                            from app.storage.resume_storage import store_resume
+                            candidate_name = dumped_result.get("candidateName") or "Unknown"
+                            candidate_role = dumped_result.get("jobTitle") or "Role not identified"
+                            email = dumped_result.get("email")
+                            skills = dumped_result.get("skills") or []
+                            logger.info("[ExtractionService] [Supabase] Persisting candidate resume '%s' to Supabase for job %s...", filename, job_id)
+                            storage_res = store_resume(
+                                file_bytes=file_bytes,
+                                filename=filename,
+                                file_hash=file_hash,
+                                candidate_name=candidate_name,
+                                email=email,
+                                resume_text=text_to_extract,
+                                skills=skills,
+                                job_role=candidate_role,
+                                content_type=content_type,
+                            )
+                            dumped_result["storageObjectPath"] = storage_res.get("storageObjectPath")
+                            dumped_result["candidateId"] = storage_res.get("candidateId")
+                            dumped_result["persistenceStatus"] = storage_res.get("persistenceStatus", "persisted")
+                            logger.info(
+                                "[ExtractionService] [Supabase] Successfully persisted candidate '%s' (ID: %s)",
+                                candidate_name,
+                                storage_res.get("candidateId"),
+                            )
+                        except Exception as s_err:
+                            logger.warning(
+                                "[ExtractionService] Non-fatal Supabase persistence error for job %s: %s",
+                                job_id,
+                                s_err,
+                            )
+
+                    job["status"] = "completed"
+                    job["result"] = dumped_result
+                    job["extractionSource"] = extraction_source
+                    job["updated_at"] = datetime.utcnow().isoformat()
+                    logger.info(
+                        "[ExtractionService] [Completed] Job %s (%s) completed successfully via source='%s'. Candidate: '%s', Role: '%s'",
+                        job_id,
+                        filename,
+                        extraction_source,
+                        dumped_result.get("candidateName"),
+                        dumped_result.get("jobTitle"),
+                    )
+
+                except Exception as exc:
+                    logger.error("[ExtractionService] [Failed] Job %s encountered error: %s", job_id, exc, exc_info=True)
+                    job["status"] = "failed"
+                    job["error"] = str(exc)
+                    job["updated_at"] = datetime.utcnow().isoformat()
+                finally:
+                    if temp_file_path and os.path.exists(temp_file_path):
+                        try:
+                            os.remove(temp_file_path)
+                        except OSError:
+                            pass
+                    self.queue.task_done()
+
+            except Exception as outer_exc:
+                logger.error("[ExtractionService] Unexpected error in worker loop: %s", outer_exc, exc_info=True)
+                await asyncio.sleep(0.5)
+
+        logger.info("[ExtractionService] Worker loop has terminated.")

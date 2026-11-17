@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -41,17 +42,6 @@ from app.storage.candidate_repository import (
 logger = logging.getLogger("ats_server")
 logging.basicConfig(level=logging.INFO)
 
-app = FastAPI(title="Hybrid Semantic ATS - Reference UI Server", version="1.0.0")
-
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=".*",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
 # Reference client build path
 REF_CLIENT_DIST = Path(r"C:\Users\LENOVO\Downloads\Resume Screening and Shortlisting agent\Resume Screening and Shortlisting agent\e2e-chatbot-app-next\client\dist")
 
@@ -64,13 +54,37 @@ extraction_adapter = ExtractionAdapter(
     legacy_extractor=structured_extractor,
 )
 
-@app.on_event("startup")
-async def startup_event():
-    await extraction_service.start()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI startup and shutdown."""
+    logger.info("[Server] Lifespan startup: Starting ExtractionService...")
+    try:
+        await extraction_service.start()
+        logger.info("[Server] ExtractionService started successfully.")
+    except Exception as exc:
+        logger.error("[Server] ExtractionService failed to start during lifespan startup: %s", exc, exc_info=True)
+    yield
+    logger.info("[Server] Lifespan shutdown: Stopping ExtractionService...")
+    try:
+        await extraction_service.stop()
+        logger.info("[Server] ExtractionService stopped successfully.")
+    except Exception as exc:
+        logger.error("[Server] ExtractionService failed to stop during lifespan shutdown: %s", exc, exc_info=True)
 
-@app.on_event("shutdown")
-async def shutdown_event():
-    await extraction_service.stop()
+app = FastAPI(
+    title="Hybrid Semantic ATS - Reference UI Server",
+    version="1.0.0",
+    lifespan=lifespan,
+)
+
+# Enable CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origin_regex=".*",
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.get("/")
 def root():

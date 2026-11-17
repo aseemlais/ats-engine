@@ -118,6 +118,41 @@ def test_extraction_service_queue_and_worker():
 
 
 @skip_async
+def test_extraction_service_auto_starts_worker_on_submit():
+    """Validates that submit_job automatically starts worker via ensure_worker if not yet started."""
+    async def _run():
+        fresh_service = ExtractionService(max_queue_size=5)
+        sample_resume = (
+            b"MICHAEL SCOTT\n"
+            b"Regional Manager | michael@dundermifflin.com | +1-570-555-0100\n"
+            b"EXPERIENCE\n"
+            b"Regional Manager - Dunder Mifflin Paper Company | 2005 - 2013\n"
+            b"SKILLS\n"
+            b"Sales, Negotiation, Management\n"
+        )
+        code, resp = await fresh_service.submit_job(sample_resume, "michael.txt", "text/plain")
+        assert code == 202
+        job_id = resp["job_id"]
+
+        assert fresh_service.running is True
+        assert fresh_service.worker_task is not None
+
+        for _ in range(50):
+            await asyncio.sleep(0.1)
+            job = fresh_service.get_job(job_id)
+            if job and job["status"] in ("completed", "failed"):
+                break
+
+        job = fresh_service.get_job(job_id)
+        assert job is not None
+        assert job["status"] == "completed", f"Job remained stuck or failed: {job}"
+        assert job["result"]["candidateName"] == "Michael Scott"
+        await fresh_service.stop()
+
+    _run_async(_run())
+
+
+@skip_async
 def test_extraction_service_queue_capacity_429():
     """Tests that submitting beyond max_queue_size returns 429 Too Many Requests."""
     async def _run():
