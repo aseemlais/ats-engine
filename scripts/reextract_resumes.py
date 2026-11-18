@@ -93,7 +93,30 @@ def fetch_resumes_to_reextract(
     from app.storage.resume_storage import get_supabase_client, is_supabase_configured
     if not is_supabase_configured():
         logger.warning("Supabase is not configured; using offline sample resumes.")
-        return []
+        sample_path = PROJECT_ROOT / "data" / "sft" / "test.jsonl"
+        candidates = []
+        if sample_path.exists():
+            import hashlib
+            with open(sample_path, "r", encoding="utf-8") as f:
+                for idx, line in enumerate(f):
+                    if idx >= limit:
+                        break
+                    line = line.strip()
+                    if not line:
+                        continue
+                    item = json.loads(line)
+                    user_msg = next((m["content"] for m in item.get("messages", []) if m["role"] == "user"), "")
+                    cid = f"LOCAL_CAND_{idx+1:03d}"
+                    fhash = hashlib.sha256(user_msg.encode("utf-8")).hexdigest()
+                    candidates.append({
+                        "id": cid,
+                        "fileHash": fhash,
+                        "originalFilename": f"resume_{idx+1:03d}.txt",
+                        "resumeText": user_msg,
+                        "extractedData": None,
+                        "extractorVersion": None,
+                    })
+        return candidates
 
     client = get_supabase_client()
     if not client:
