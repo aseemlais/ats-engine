@@ -64,8 +64,8 @@ def test_local_extraction_service_queue_and_worker():
             assert job["status"] == "completed", f"Job failed: {job.get('error')}"
             assert job["result"] is not None
             assert "candidateName" in job["result"]
-            assert job.get("extractionSource") in ("slm", "fallback")
-            assert job["result"].get("extractionSource") in ("slm", "fallback")
+            assert job.get("extractionSource") in ("slm", "fallback", "legacy")
+            assert job["result"].get("extractionSource") in ("slm", "fallback", "legacy")
         finally:
             await service.stop()
 
@@ -144,19 +144,21 @@ def test_local_fastapi_extract_and_poll_endpoints():
         files = {
             "file": ("dev_cv.txt", b"Jane Doe\nStaff Engineer\njane.doe@example.com", "text/plain")
         }
-        res = client.post("/extract", files=files)
+        # Pass dev-mode header; ENVIRONMENT defaults to development so the guard is skipped
+        headers = {"X-ATS-Internal-Secret": "dev"}
+        res = client.post("/extract", files=files, headers=headers)
         assert res.status_code in (200, 202)
         data = res.json()
         assert "job_id" in data
         job_id = data["job_id"]
 
-        poll_res = client.get(f"/jobs/{job_id}")
+        poll_res = client.get(f"/jobs/{job_id}", headers=headers)
         assert poll_res.status_code == 200
         poll_data = poll_res.json()
         assert poll_data["job_id"] == job_id
         assert poll_data["status"] in ("pending", "processing", "completed")
 
-        bad_res = client.get("/jobs/non_existent_uuid_99999")
+        bad_res = client.get("/jobs/non_existent_uuid_99999", headers=headers)
         assert bad_res.status_code == 404
 
 

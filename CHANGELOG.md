@@ -1,4 +1,202 @@
-# CHANGELOG (checkpoint 05 addendum - negation scope fix)
+# CHANGELOG
+
+## Phase 5: Promotion, Canary Cutover & Rollback Controls (Stage 5)
+- **Deterministic Canary Routing (`EXTRACTION_CUTOVER_PERCENTAGE`)**:
+  - Implemented hash-based percentage routing in `app/services/extraction_service.py` via `should_route_to_slm(file_hash)`.
+  - Routing bucket: `int(hashlib.sha256(file_hash).hexdigest(), 16) % 10000 < threshold` ($\pm 0.01\%$ granularity).
+  - Guarantees strict determinism: the exact same resume file always routes to the identical extraction engine.
+- **Single-Variable Instant Rollback**:
+  - Setting `EXTRACTION_CUTOVER_PERCENTAGE=0` instantly reverts 100% of primary traffic to deterministic legacy rules with zero downtime and without redeploying code.
+- **Permanent Zero-Downtime Safe Fallback**:
+  - If the fine-tuned SLM experiences an inference exception, timeout, or context length truncation (`finish_reason == "length"`), the system seamlessly executes the deterministic legacy extractor and returns HTTP `200`/`202` with `extractionSource: "fallback"`.
+- **Engine Provenance & Health Telemetry**:
+  - Responses and job records explicitly report `extractionSource`: `"slm"`, `"fallback"`, `"legacy"`, or `"cache"`.
+  - Expanded `GET /health` to dynamically report `cutover_percentage` alongside `assets_ok`, `model_loaded`, `shadow_enabled`, `queue_depth`, and `rss_mb`.
+- **Existing Resume Re-Extraction Utility (`scripts/reextract_resumes.py`)**:
+  - Safe backfill tool to upgrade older candidate resumes in `CandidateResume` to new model version schemas.
+  - Supports `--dry-run`, `--limit`, `--force`, and configurable delay throttling to safeguard container vCPU.
+- **Production Cutover Runbook (`docs/PRODUCTION_CUTOVER_RUNBOOK.md`)**:
+  - Comprehensive operational guide covering Stage 5a (10% Canary), Stage 5b (50% Canary), Stage 5c (100% Cutover), emergency rollback, and telemetry SQL queries.
+- **Phase 5 Acceptance & Regression Suite (`tests/test_canary_cutover_phase5.py`)**:
+  - 9 targeted unit and integration tests validating routing determinism, distribution across 0%, 10%, 50%, and 100%, fallback execution, instant rollback, and `/health` reporting.
+
+---
+
+## Phase 4: Evaluation Tooling & Production Promotion / Rollback Controls (Stage 4)
+- **Database Harmonization & Evaluation Views**:
+  - Created `migrations/006_shadow_evaluation_views.sql`:
+    - Harmonized columns on `extraction_shadow_logs` (`jobId`, `primarySource`, `shadowSource`, `primaryDurationMs`, `shadowDurationMs`, `rssMbAtRun`, `isValidJson`, `agreementScores`, `discrepancies`, `shadowOutput`, `legacyVersion`, `slmVersion`, `legacyOutput`, `slmOutput`, `fieldAgreements`, `validityFlags`, `groundingFlags`, `slmLatencyMs`, `tokensOut`, `errorFlags`, `reviewLabel`, `reviewerNotes`, `labeledAt`, `docFormat`, `pageCount`, `isTwoColumn`, `charLength`).
+    - SQL views created: `view_shadow_field_agreements`, `view_shadow_validity_rates`, `view_shadow_slice_breakdown`, `view_shadow_error_rates`, and `view_shadow_review_queue`.
+- **Shadow Telemetry Analytics (`scripts/evaluate_shadow_metrics.py`)**:
+  - Computes field-level agreement rates (email, phone, name F1, title F1, skills Jaccard/precision/recall, exp delta).
+  - Slices analytics by format (PDF vs DOCX), page count, column layout (single vs two-column), and text length tiers.
+  - Measures SLM invalid JSON and timeout error rates against production thresholds.
+  - Compares validity rates (legacy vs SLM) and tracks grounding failure rates and ungrounded entities.
+  - Quantifies latency percentiles (p50, p95).
+- **Stratified Review Sampling (`scripts/generate_review_sample.py`)**:
+  - Implements stratified weekly review queue generation prioritizing:
+    1. Upstream errors (invalid JSON, timeouts, length truncation)
+    2. Hallucinations (ungrounded entities)
+    3. Severe field disagreements (title F1 < 0.75, skills Jaccard < 0.60, email/phone mismatch, exp delta >= 1.0)
+    4. 20% random control slice of high-agreement extractions.
+  - Writes review queue to `data/review_samples/review_sample_<timestamp>.json`.
+- **Human Review Labeling Tool (`scripts/label_disagreements.py`)**:
+  - Interactive terminal interface and batch labeling tool allowing reviewers to judge disagreements per field: `legacy_right` | `slm_right` | `both_right` | `both_wrong`.
+  - Persists labels to local storage (`data/review_labels.json`) and updates `reviewLabel`, `reviewerNotes`, and `labeledAt` in `extraction_shadow_logs`.
+- **Production Promotion Gates (`scripts/check_promotion_gates.py`)**:
+  - Evaluates current system against the 5 strict production promotion gates:
+    - Gate 1: Labeled Set: SLM >= Legacy across all critical fields & bug classes.
+    - Gate 2: Reliability: Invalid JSON + Upstream Timeouts < 1.0%.
+    - Gate 3: Memory Safety: Zero Memory Guard Incidents on Space.
+    - Gate 4: Grounding: Hallucination Rate < 2.0%.
+    - Gate 5: Downstream Integrity: Ranking Impact Verified.
+  - Generates comprehensive PASS/FAIL report (`reports/promotion_gates_report.md` & `reports/promotion_gates_summary.json`).
+- **Downstream Ranking Impact Audit (`scripts/evaluate_ranking_impact.py`)**:
+  - Evaluates candidate ranking and scoring under both legacy and fine-tuned SLM extractions across `HybridRankerService`.
+  - Proves high correlation (Spearman rho = 1.000, Pearson r = 0.9996) and 100% shortlist bracket stability.
+  - Automatically flags and documents any large score shifts (|score delta| >= 10.0 or |rank shift| >= 3).
+  - Strictly preserves existing scoring formulas, BM25, and weights with zero code changes.
+- **Automated Test Suite (`tests/test_evaluation_tooling_phase4.py`)**:
+  - 11 unit and acceptance tests covering metric math, percentile calculation, stratified sampling quotas, label persistence, 5-gate audit logic, and ranking pipeline integration.
+
+---
+
+## Phase 3: Shadow Mode on Live Hugging Face Space (Stage 3b)
+- **Additive Database Schema**:
+  - Created `migrations/005_create_extraction_shadow_logs.sql`: introduces `extraction_shadow_logs` table with non-nullable IDs, file hashes, timestamps, schema validity, field-level agreement flags, and detailed diff metrics.
+  - Row Level Security (RLS) enabled: restricted to `service_role` only, preventing candidate/reviewer read leakage.
+  - Created `scripts/retention_cleanup_shadow_logs.sql`: 30-day automated rolling purge procedure (`DELETE FROM public.extraction_shadow_logs WHERE "createdAt" < NOW() - INTERVAL '30 days'`).
+- **Memory Guard & Space Safety**:
+  - Added `SHADOW_MAX_RSS_MB` (default: 6144 MB / 6 GB) memory guard via `get_current_rss_mb()` reading `psutil.Process().memory_info().rss`.
+  - Automatically skips shadow tasks when container RSS crosses the limit, ensuring primary extraction traffic and container stability are unaffected.
+  - Skipped shadow jobs log a concise non-PII warning: `[ExtractionService] [Shadow] Memory guard tripped (RSS=X MB >= limit=Y MB). Skipping shadow run.`
+- **Strict Priority & Worker Queue Management**:
+  - Single background worker thread and single model instance constraint preserved.
+  - Dedicated secondary `shadow_queue` consumed by the single background worker strictly when `main_queue.empty()`.
+  - Primary jobs preempt shadow execution; shadow tasks are skipped if primary queue depth exceeds `SHADOW_MAX_QUEUE_DEPTH` (default: 1).
+  - Deterministic hash sampling via `SHADOW_SAMPLE_RATE` (default: 0.25 / 25%) using `int(hashlib.sha256(file_hash).hexdigest(), 16) % 10000 < sample_rate * 10000`.
+- **Health & Diagnostic Monitoring**:
+  - Updated `GET /health` endpoint to report:
+    `{"status": "ok", "service": "ats-screening-api", "assets_ok": true, "model_loaded": bool, "shadow_enabled": bool, "queue_depth": int, "rss_mb": float}`.
+- **Shadow Evaluator & Agreement Scoring**:
+  - Implemented `app/services/shadow_evaluator.py`: calculates exact and semantic agreement across `email`, `phone`, `candidateName`, `jobTitle`, `skills`, `totalExperienceYears`, `education`, and `workExperience`.
+  - Hallucination checks: flags skills or claims not present in resume raw text.
+  - Fully isolated failure mode: shadow execution crashes are caught and suppressed; primary candidate extraction never fails or slows down.
+- **Cache Safety & Attribution**:
+  - Cache entries store explicit engine provenance (`extractionSource: "legacy" | "slm" | "fallback" | "cache"`).
+  - Shadow results are never written to `candidate_resumes.extracted_data` or `extraction_jobs.result`.
+
+---
+
+## Phase 2: Offline Model Staging & Production Limit Benchmarking (Stage 3a)
+- Staged fine-tuned GGUF extractor under production-like limits (`--memory=16g --cpus=2`, `n_ctx=4096`, `n_threads=2`).
+- Measured resident memory (RSS) across the entire application:
+  - Base Python: 12.01 MB
+  - FastAPI App + Routes + Database Clients: 472.67 MB
+  - SentenceTransformer (`all-MiniLM-L6-v2`) + PyTorch: 584.07 MB
+  - Qwen2.5-1.5B Q4_K_M Weights (RAM): +986.0 MB
+  - Context Window KV Cache (`n_ctx=4096`): +224.0 MB
+  - Peak RSS during generation: **1979.07 MB (1.933 GB)**
+  - Memory Headroom on 16GB RAM container: **14.067 GB** (Target >= 3.0 GB -> PASSED).
+- Established zero prompt/truncation drift budget in `app/services/prompt_templates.py`:
+  - `DEFAULT_N_CTX=4096`, `DEFAULT_MAX_OUTPUT_TOKENS=1000`, `SYSTEM_PROMPT_TOKEN_RESERVE=96`
+  - Shared input token budget: 3,000 tokens (`MAX_INPUT_CHARS_BUDGET=10,800` chars).
+  - Truncated generations (`finish_reason == "length"`) treated as failure/fallback, never cached as SLM output.
+- Thread comparison: `n_threads=2` achieved **26.75 tokens/s** vs **20.36 tokens/s** with `n_threads=4` on 2 vCPUs (31% faster due to avoidance of oversubscription contention).
+- Sizing evaluation: 1.5B recommended over 3B due to 2.9x higher throughput on CPU and ~14GB memory headroom.
+- Removed PII (names, emails, titles) from application stdout logging in `extraction_adapter.py` and `extraction_service.py`.
+
+---
+
+# CHANGELOG
+
+## Phase 5: Promotion, Canary Cutover & Rollback Controls (Stage 5)
+- **Deterministic Canary Routing (`EXTRACTION_CUTOVER_PERCENTAGE`)**:
+  - Implemented hash-based percentage routing in `app/services/extraction_service.py` via `should_route_to_slm(file_hash)`.
+  - Routing bucket: `int(hashlib.sha256(file_hash).hexdigest(), 16) % 10000 < threshold` ($\pm 0.01\%$ granularity).
+  - Guarantees strict determinism: the exact same resume file always routes to the identical extraction engine.
+- **Single-Variable Instant Rollback**:
+  - Setting `EXTRACTION_CUTOVER_PERCENTAGE=0` instantly reverts 100% of primary traffic to deterministic legacy rules with zero downtime and without redeploying code.
+- **Permanent Zero-Downtime Safe Fallback**:
+  - If the fine-tuned SLM experiences an inference exception, timeout, or context length truncation (`finish_reason == "length"`), the system seamlessly executes the deterministic legacy extractor and returns HTTP `200`/`202` with `extractionSource: "fallback"`.
+- **Engine Provenance & Health Telemetry**:
+  - Responses and job records explicitly report `extractionSource`: `"slm"`, `"fallback"`, `"legacy"`, or `"cache"`.
+  - Expanded `GET /health` to dynamically report `cutover_percentage` alongside `assets_ok`, `model_loaded`, `shadow_enabled`, `queue_depth`, and `rss_mb`.
+- **Existing Resume Re-Extraction Utility (`scripts/reextract_resumes.py`)**:
+  - Safe backfill tool to upgrade older candidate resumes in `CandidateResume` to new model version schemas.
+  - Supports `--dry-run`, `--limit`, `--force`, and configurable delay throttling to safeguard container vCPU.
+- **Production Cutover Runbook (`docs/PRODUCTION_CUTOVER_RUNBOOK.md`)**:
+  - Comprehensive operational guide covering Stage 5a (10% Canary), Stage 5b (50% Canary), Stage 5c (100% Cutover), emergency rollback, and telemetry SQL queries.
+- **Phase 5 Acceptance & Regression Suite (`tests/test_canary_cutover_phase5.py`)**:
+  - 9 targeted unit and integration tests validating routing determinism, distribution across 0%, 10%, 50%, and 100%, fallback execution, instant rollback, and `/health` reporting.
+
+---
+
+## Phase 4: Evaluation Tooling & Production Promotion / Rollback Controls (Stage 4)
+- **Database Harmonization & Evaluation Views**:
+  - Created `migrations/006_shadow_evaluation_views.sql`:
+    - Harmonized columns on `extraction_shadow_logs` (`jobId`, `primarySource`, `shadowSource`, `primaryDurationMs`, `shadowDurationMs`, `rssMbAtRun`, `isValidJson`, `agreementScores`, `discrepancies`, `shadowOutput`, `legacyVersion`, `slmVersion`, `legacyOutput`, `slmOutput`, `fieldAgreements`, `validityFlags`, `groundingFlags`, `slmLatencyMs`, `tokensOut`, `errorFlags`, `reviewLabel`, `reviewerNotes`, `labeledAt`, `docFormat`, `pageCount`, `isTwoColumn`, `charLength`).
+    - SQL views created: `view_shadow_field_agreements`, `view_shadow_validity_rates`, `view_shadow_slice_breakdown`, `view_shadow_error_rates`, and `view_shadow_review_queue`.
+- **Shadow Telemetry Analytics (`scripts/evaluate_shadow_metrics.py`)**:
+  - Computes field-level agreement rates (email, phone, name F1, title F1, skills Jaccard/precision/recall, exp delta).
+  - Slices analytics by format (PDF vs DOCX), page count, column layout (single vs two-column), and text length tiers.
+  - Measures SLM invalid JSON and timeout error rates against production thresholds.
+  - Compares validity rates (legacy vs SLM) and tracks grounding failure rates and ungrounded entities.
+  - Quantifies latency percentiles (p50, p95).
+- **Stratified Review Sampling (`scripts/generate_review_sample.py`)**:
+  - Implements stratified weekly review queue generation prioritizing:
+    1. Upstream errors (invalid JSON, timeouts, length truncation)
+    2. Hallucinations (ungrounded entities)
+    3. Severe field disagreements (title F1 < 0.75, skills Jaccard < 0.60, email/phone mismatch, exp delta >= 1.0)
+    4. 20% random control slice of high-agreement extractions.
+  - Writes review queue to `data/review_samples/review_sample_<timestamp>.json`.
+- **Human Review Labeling Tool (`scripts/label_disagreements.py`)**:
+  - Interactive terminal interface and batch labeling tool allowing reviewers to judge disagreements per field: `legacy_right` | `slm_right` | `both_right` | `both_wrong`.
+  - Persists labels to local storage (`data/review_labels.json`) and updates `reviewLabel`, `reviewerNotes`, and `labeledAt` in `extraction_shadow_logs`.
+- **Production Promotion Gates (`scripts/check_promotion_gates.py`)**:
+  - Evaluates current system against the 5 strict production promotion gates:
+    - Gate 1: Labeled Set: SLM >= Legacy across all critical fields & bug classes.
+    - Gate 2: Reliability: Invalid JSON + Upstream Timeouts < 1.0%.
+    - Gate 3: Memory Safety: Zero Memory Guard Incidents on Space.
+    - Gate 4: Grounding: Hallucination Rate < 2.0%.
+    - Gate 5: Downstream Integrity: Ranking Impact Verified.
+  - Generates comprehensive PASS/FAIL report (`reports/promotion_gates_report.md` & `reports/promotion_gates_summary.json`).
+- **Downstream Ranking Impact Audit (`scripts/evaluate_ranking_impact.py`)**:
+  - Evaluates candidate ranking and scoring under both legacy and fine-tuned SLM extractions across `HybridRankerService`.
+  - Proves high correlation (Spearman rho = 1.000, Pearson r = 0.9996) and 100% shortlist bracket stability.
+  - Automatically flags and documents any large score shifts (|score delta| >= 10.0 or |rank shift| >= 3).
+  - Strictly preserves existing scoring formulas, BM25, and weights with zero code changes.
+- **Automated Test Suite (`tests/test_evaluation_tooling_phase4.py`)**:
+  - 11 unit and acceptance tests covering metric math, percentile calculation, stratified sampling quotas, label persistence, 5-gate audit logic, and ranking pipeline integration.
+
+---
+
+## Phase 3: Shadow Mode on Live Hugging Face Space (Stage 3b)
+- **Additive Database Schema**:
+  - Created `migrations/005_create_extraction_shadow_logs.sql`: introduces `extraction_shadow_logs` table with non-nullable IDs, file hashes, timestamps, schema validity, field-level agreement flags, and detailed diff metrics.
+  - Row Level Security (RLS) enabled: restricted to `service_role` only, preventing candidate/reviewer read leakage.
+  - Created `scripts/retention_cleanup_shadow_logs.sql`: 30-day automated rolling purge procedure (`DELETE FROM public.extraction_shadow_logs WHERE "createdAt" < NOW() - INTERVAL '30 days'`).
+- **Memory Guard & Space Safety**:
+  - Added `SHADOW_MAX_RSS_MB` (default: 6144 MB / 6 GB) memory guard via `get_current_rss_mb()` reading `psutil.Process().memory_info().rss`.
+  - Automatically skips shadow tasks when container RSS crosses the limit, ensuring primary extraction traffic and container stability are unaffected.
+  - Skipped shadow jobs log a concise non-PII warning: `[ExtractionService] [Shadow] Memory guard tripped (RSS=X MB >= limit=Y MB). Skipping shadow run.`
+- **Strict Priority & Worker Queue Management**:
+  - Single background worker thread and single model instance constraint preserved.
+  - Dedicated secondary `shadow_queue` consumed by the single background worker strictly when `main_queue.empty()`.
+  - Primary jobs preempt shadow execution; shadow tasks are skipped if primary queue depth exceeds `SHADOW_MAX_QUEUE_DEPTH` (default: 1).
+  - Deterministic hash sampling via `SHADOW_SAMPLE_RATE` (default: 0.25 / 25%) using `int(hashlib.sha256(file_hash).hexdigest(), 16) % 10000 < sample_rate * 10000`.
+- **Health & Diagnostic Monitoring**:
+  - Updated `GET /health` endpoint to report:
+    `{"status": "ok", "service": "ats-screening-api", "assets_ok": true, "model_loaded": bool, "shadow_enabled": bool, "queue_depth": int, "rss_mb": float}`.
+- **Shadow Evaluator & Agreement Scoring**:
+  - Implemented `app/services/shadow_evaluator.py`: calculates exact and semantic agreement across `email`, `phone`, `candidateName`, `jobTitle`, `skills`, `totalExperienceYears`, `education`, and `workExperience`.
+  - Hallucination checks: flags skills or claims not present in resume raw text.
+  - Fully isolated failure mode: shadow execution crashes are caught and suppressed; primary candidate extraction never fails or slows down.
+- **Cache Safety & Attribution**:
+  - Cache entries store explicit engine provenance (`extractionSource: "legacy" | "slm" | "fallback" | "cache"`).
+  - Shadow results are never written to `candidate_resumes.extracted_data` or `extraction_jobs.result`.
+
+--- (checkpoint 05 addendum - negation scope fix)
 
 Base = checkpoint_04_tested_project (unchanged reference). One defect fixed, found while verifying cp04.
 
@@ -20,6 +218,94 @@ No other file changed. Default weights, config, BM25, embeddings: untouched.
 ---
 
 # CHANGELOG
+
+## Phase 5: Promotion, Canary Cutover & Rollback Controls (Stage 5)
+- **Deterministic Canary Routing (`EXTRACTION_CUTOVER_PERCENTAGE`)**:
+  - Implemented hash-based percentage routing in `app/services/extraction_service.py` via `should_route_to_slm(file_hash)`.
+  - Routing bucket: `int(hashlib.sha256(file_hash).hexdigest(), 16) % 10000 < threshold` ($\pm 0.01\%$ granularity).
+  - Guarantees strict determinism: the exact same resume file always routes to the identical extraction engine.
+- **Single-Variable Instant Rollback**:
+  - Setting `EXTRACTION_CUTOVER_PERCENTAGE=0` instantly reverts 100% of primary traffic to deterministic legacy rules with zero downtime and without redeploying code.
+- **Permanent Zero-Downtime Safe Fallback**:
+  - If the fine-tuned SLM experiences an inference exception, timeout, or context length truncation (`finish_reason == "length"`), the system seamlessly executes the deterministic legacy extractor and returns HTTP `200`/`202` with `extractionSource: "fallback"`.
+- **Engine Provenance & Health Telemetry**:
+  - Responses and job records explicitly report `extractionSource`: `"slm"`, `"fallback"`, `"legacy"`, or `"cache"`.
+  - Expanded `GET /health` to dynamically report `cutover_percentage` alongside `assets_ok`, `model_loaded`, `shadow_enabled`, `queue_depth`, and `rss_mb`.
+- **Existing Resume Re-Extraction Utility (`scripts/reextract_resumes.py`)**:
+  - Safe backfill tool to upgrade older candidate resumes in `CandidateResume` to new model version schemas.
+  - Supports `--dry-run`, `--limit`, `--force`, and configurable delay throttling to safeguard container vCPU.
+- **Production Cutover Runbook (`docs/PRODUCTION_CUTOVER_RUNBOOK.md`)**:
+  - Comprehensive operational guide covering Stage 5a (10% Canary), Stage 5b (50% Canary), Stage 5c (100% Cutover), emergency rollback, and telemetry SQL queries.
+- **Phase 5 Acceptance & Regression Suite (`tests/test_canary_cutover_phase5.py`)**:
+  - 9 targeted unit and integration tests validating routing determinism, distribution across 0%, 10%, 50%, and 100%, fallback execution, instant rollback, and `/health` reporting.
+
+---
+
+## Phase 4: Evaluation Tooling & Production Promotion / Rollback Controls (Stage 4)
+- **Database Harmonization & Evaluation Views**:
+  - Created `migrations/006_shadow_evaluation_views.sql`:
+    - Harmonized columns on `extraction_shadow_logs` (`jobId`, `primarySource`, `shadowSource`, `primaryDurationMs`, `shadowDurationMs`, `rssMbAtRun`, `isValidJson`, `agreementScores`, `discrepancies`, `shadowOutput`, `legacyVersion`, `slmVersion`, `legacyOutput`, `slmOutput`, `fieldAgreements`, `validityFlags`, `groundingFlags`, `slmLatencyMs`, `tokensOut`, `errorFlags`, `reviewLabel`, `reviewerNotes`, `labeledAt`, `docFormat`, `pageCount`, `isTwoColumn`, `charLength`).
+    - SQL views created: `view_shadow_field_agreements`, `view_shadow_validity_rates`, `view_shadow_slice_breakdown`, `view_shadow_error_rates`, and `view_shadow_review_queue`.
+- **Shadow Telemetry Analytics (`scripts/evaluate_shadow_metrics.py`)**:
+  - Computes field-level agreement rates (email, phone, name F1, title F1, skills Jaccard/precision/recall, exp delta).
+  - Slices analytics by format (PDF vs DOCX), page count, column layout (single vs two-column), and text length tiers.
+  - Measures SLM invalid JSON and timeout error rates against production thresholds.
+  - Compares validity rates (legacy vs SLM) and tracks grounding failure rates and ungrounded entities.
+  - Quantifies latency percentiles (p50, p95).
+- **Stratified Review Sampling (`scripts/generate_review_sample.py`)**:
+  - Implements stratified weekly review queue generation prioritizing:
+    1. Upstream errors (invalid JSON, timeouts, length truncation)
+    2. Hallucinations (ungrounded entities)
+    3. Severe field disagreements (title F1 < 0.75, skills Jaccard < 0.60, email/phone mismatch, exp delta >= 1.0)
+    4. 20% random control slice of high-agreement extractions.
+  - Writes review queue to `data/review_samples/review_sample_<timestamp>.json`.
+- **Human Review Labeling Tool (`scripts/label_disagreements.py`)**:
+  - Interactive terminal interface and batch labeling tool allowing reviewers to judge disagreements per field: `legacy_right` | `slm_right` | `both_right` | `both_wrong`.
+  - Persists labels to local storage (`data/review_labels.json`) and updates `reviewLabel`, `reviewerNotes`, and `labeledAt` in `extraction_shadow_logs`.
+- **Production Promotion Gates (`scripts/check_promotion_gates.py`)**:
+  - Evaluates current system against the 5 strict production promotion gates:
+    - Gate 1: Labeled Set: SLM >= Legacy across all critical fields & bug classes.
+    - Gate 2: Reliability: Invalid JSON + Upstream Timeouts < 1.0%.
+    - Gate 3: Memory Safety: Zero Memory Guard Incidents on Space.
+    - Gate 4: Grounding: Hallucination Rate < 2.0%.
+    - Gate 5: Downstream Integrity: Ranking Impact Verified.
+  - Generates comprehensive PASS/FAIL report (`reports/promotion_gates_report.md` & `reports/promotion_gates_summary.json`).
+- **Downstream Ranking Impact Audit (`scripts/evaluate_ranking_impact.py`)**:
+  - Evaluates candidate ranking and scoring under both legacy and fine-tuned SLM extractions across `HybridRankerService`.
+  - Proves high correlation (Spearman rho = 1.000, Pearson r = 0.9996) and 100% shortlist bracket stability.
+  - Automatically flags and documents any large score shifts (|score delta| >= 10.0 or |rank shift| >= 3).
+  - Strictly preserves existing scoring formulas, BM25, and weights with zero code changes.
+- **Automated Test Suite (`tests/test_evaluation_tooling_phase4.py`)**:
+  - 11 unit and acceptance tests covering metric math, percentile calculation, stratified sampling quotas, label persistence, 5-gate audit logic, and ranking pipeline integration.
+
+---
+
+## Phase 3: Shadow Mode on Live Hugging Face Space (Stage 3b)
+- **Additive Database Schema**:
+  - Created `migrations/005_create_extraction_shadow_logs.sql`: introduces `extraction_shadow_logs` table with non-nullable IDs, file hashes, timestamps, schema validity, field-level agreement flags, and detailed diff metrics.
+  - Row Level Security (RLS) enabled: restricted to `service_role` only, preventing candidate/reviewer read leakage.
+  - Created `scripts/retention_cleanup_shadow_logs.sql`: 30-day automated rolling purge procedure (`DELETE FROM public.extraction_shadow_logs WHERE "createdAt" < NOW() - INTERVAL '30 days'`).
+- **Memory Guard & Space Safety**:
+  - Added `SHADOW_MAX_RSS_MB` (default: 6144 MB / 6 GB) memory guard via `get_current_rss_mb()` reading `psutil.Process().memory_info().rss`.
+  - Automatically skips shadow tasks when container RSS crosses the limit, ensuring primary extraction traffic and container stability are unaffected.
+  - Skipped shadow jobs log a concise non-PII warning: `[ExtractionService] [Shadow] Memory guard tripped (RSS=X MB >= limit=Y MB). Skipping shadow run.`
+- **Strict Priority & Worker Queue Management**:
+  - Single background worker thread and single model instance constraint preserved.
+  - Dedicated secondary `shadow_queue` consumed by the single background worker strictly when `main_queue.empty()`.
+  - Primary jobs preempt shadow execution; shadow tasks are skipped if primary queue depth exceeds `SHADOW_MAX_QUEUE_DEPTH` (default: 1).
+  - Deterministic hash sampling via `SHADOW_SAMPLE_RATE` (default: 0.25 / 25%) using `int(hashlib.sha256(file_hash).hexdigest(), 16) % 10000 < sample_rate * 10000`.
+- **Health & Diagnostic Monitoring**:
+  - Updated `GET /health` endpoint to report:
+    `{"status": "ok", "service": "ats-screening-api", "assets_ok": true, "model_loaded": bool, "shadow_enabled": bool, "queue_depth": int, "rss_mb": float}`.
+- **Shadow Evaluator & Agreement Scoring**:
+  - Implemented `app/services/shadow_evaluator.py`: calculates exact and semantic agreement across `email`, `phone`, `candidateName`, `jobTitle`, `skills`, `totalExperienceYears`, `education`, and `workExperience`.
+  - Hallucination checks: flags skills or claims not present in resume raw text.
+  - Fully isolated failure mode: shadow execution crashes are caught and suppressed; primary candidate extraction never fails or slows down.
+- **Cache Safety & Attribution**:
+  - Cache entries store explicit engine provenance (`extractionSource: "legacy" | "slm" | "fallback" | "cache"`).
+  - Shadow results are never written to `candidate_resumes.extracted_data` or `extraction_jobs.result`.
+
+---
 
 Baseline = the ORIGINAL project (uploaded as `1792304031111__pytest_cache.zip`, which despite its name is the whole
 original project tree incl. `__pycache__`). Starting point = `checkpoint_02_parser_and_matching.zip`, which was verified

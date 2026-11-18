@@ -1,0 +1,65 @@
+{
+  "generatedAt": "2026-11-18T05:36:23.183600+00:00",
+  "totalRuns": 1,
+  "agreements": {
+    "emailExactMatchPct": 100.0,
+    "phoneExactMatchPct": 100.0,
+    "avgNameTokenF1": 1.0,
+    "avgTitleTokenF1": 0.8,
+    "avgSkillsJaccard": 0.8333,
+    "avgSkillsPrecision": 0.8333,
+    "avgSkillsRecall": 1.0,
+    "avgExpDeltaYears": 0.0,
+    "educationCountMatchPct": 100.0,
+    "workExperienceCountMatchPct": 100.0
+  },
+  "validityComparison": {
+    "email": {
+      "legacyValidPct": 100.0,
+      "slmValidPct": 100.0
+    },
+    "phone": {
+      "legacyValidPct": 100.0,
+      "slmValidPct": 100.0
+    },
+    "name": {
+      "legacyValidPct": 100.0,
+      "slmValidPct": 100.0
+    },
+    "dates": {
+      "legacyValidPct": 100.0,
+      "slmValidPct": 100.0
+    }
+  },
+  "errors": {
+    "invalidJsonCount": 0,
+    "invalidJsonRatePct": 0.0,
+    "timeoutCount": 0,
+    "timeoutRatePct": 0.0,
+    "totalErrorRatePct": 0.0
+  },
+  "grounding": {
+    "groundingFailureCount": 1,
+    "groundingFailureRatePct": 100.0,
+    "groundedRatePct": 0.0,
+    "ungroundedEntitiesBreakdown": {
+      "skill": 1
+    }
+  },
+  "latency": {
+    "p50Ms": 1420.5,
+    "p95Ms": 1420.5,
+    "minMs": 1420.5,
+    "maxMs": 1420.5,
+    "meanMs": 1420.5
+  },
+  "sliceBreakdown": [
+    {
+      "slice": "PDF | 2p | 1-Col | medium (2k-5k)",
+      "sample_count": 1,
+      "avg_title_f1": 0.8,
+      "avg_skills_jaccard": 0.8333,
+      "avg_latency_ms": 1420.5
+    }
+  ]
+}

@@ -291,7 +291,9 @@ def test_fastapi_extract_and_poll_endpoints():
         files = {
             "file": ("test_cv.txt", b"Jane Doe\nFull-Stack Developer\njane@example.com", "text/plain")
         }
-        res = client.post("/extract", files=files)
+        # Pass dev-mode header; ENVIRONMENT defaults to development so the guard is skipped
+        headers = {"X-ATS-Internal-Secret": "dev"}
+        res = client.post("/extract", files=files, headers=headers)
         assert res.status_code in (200, 202)
         data = res.json()
         assert "job_id" in data
@@ -299,12 +301,12 @@ def test_fastapi_extract_and_poll_endpoints():
         job_id = data["job_id"]
 
         # 2. Poll /jobs/{job_id}
-        poll_res = client.get(f"/jobs/{job_id}")
+        poll_res = client.get(f"/jobs/{job_id}", headers=headers)
         assert poll_res.status_code == 200
         poll_data = poll_res.json()
         assert poll_data["job_id"] == job_id
         assert poll_data["status"] in ("pending", "processing", "completed")
 
         # 3. Non-existent job returns 404
-        bad_res = client.get("/jobs/non_existent_uuid_12345")
+        bad_res = client.get("/jobs/non_existent_uuid_12345", headers=headers)
         assert bad_res.status_code == 404

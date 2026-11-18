@@ -1,10 +1,16 @@
 import os
 import sys
+import io
 import json
+import hmac
 import logging
+import collections
+import time
+import zipfile
+import threading
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, Query
@@ -42,6 +48,157 @@ from app.storage.candidate_repository import (
 logger = logging.getLogger("ats_server")
 logging.basicConfig(level=logging.INFO)
 
+# ---------------------------------------------------------------------------
+# Security & Rate Limiting Constants
+# ---------------------------------------------------------------------------
+MAX_UPLOAD_SIZE_BYTES = int(os.getenv("MAX_UPLOAD_SIZE_BYTES", str(5 * 1024 * 1024)))  # 5 MB
+MAX_PAGE_COUNT = int(os.getenv("MAX_PAGE_COUNT", "15"))  # 15 pages
+MAX_DOCX_UNCOMPRESSED_BYTES = int(os.getenv("MAX_DOCX_UNCOMPRESSED_BYTES", str(20 * 1024 * 1024)))  # 20 MB
+
+# Global safety-net caps; per-user rate limiting is the Node layer's job.
+RATE_LIMIT_GLOBAL_EXTRACT_MAX = int(os.getenv("RATE_LIMIT_GLOBAL_EXTRACT_MAX", "120"))  # 120 / min
+RATE_LIMIT_GLOBAL_JOBS_MAX = int(os.getenv("RATE_LIMIT_GLOBAL_JOBS_MAX", "600"))  # 600 / min
+
+_INTERNAL_SECRET_ENV = "ATS_INTERNAL_SECRET"
+
+
+def is_production_mode() -> bool:
+    """Detects whether server is running in production mode."""
+    env = os.getenv("ENVIRONMENT", "").lower()
+    is_prod_flag = os.getenv("PRODUCTION", "").lower() in ("true", "1")
+    is_hf_space = bool(os.getenv("SPACE_ID"))
+    return env in ("production", "prod") or is_prod_flag or is_hf_space
+
+
+_rate_limit_records: Dict[str, list] = collections.defaultdict(list)
+_rate_limit_lock = threading.Lock()
+
+
+def check_rate_limit(key: str, max_requests: int, window_seconds: int = 60) -> bool:
+    """Global sliding-window rate limiter with timestamp eviction. Thread-safe."""
+    now = time.time()
+    with _rate_limit_lock:
+        timestamps = _rate_limit_records[key]
+        # Evict stale entries
+        _rate_limit_records[key] = [t for t in timestamps if now - t < window_seconds]
+        if len(_rate_limit_records[key]) >= max_requests:
+            return False
+        _rate_limit_records[key].append(now)
+        return True
+
+
+def verify_internal_secret(request: Request) -> None:
+    """
+    Validates the X-ATS-Internal-Secret header using constant-time compare.
+    - In production mode, rejects with 401 if ATS_INTERNAL_SECRET is unset.
+    - If ATS_INTERNAL_SECRET is configured, requires matching header.
+    - In non-production mode with unset secret, allows request for local dev/testing.
+    Raises HTTPException(401) on failure.
+    """
+    configured = os.environ.get(_INTERNAL_SECRET_ENV, "").strip()
+    if not configured:
+        if is_production_mode():
+            raise HTTPException(
+                status_code=401,
+                detail={
+                    "error": "Internal secret not configured. Set ATS_INTERNAL_SECRET on the HF Space.",
+                    "header": "X-ATS-Internal-Secret",
+                },
+            )
+        return  # skip in non-production when secret is unset
+
+    provided = request.headers.get("X-ATS-Internal-Secret", "")
+    if not hmac.compare_digest(provided, configured):
+        raise HTTPException(
+            status_code=401,
+            detail={"error": "Invalid or missing X-ATS-Internal-Secret header."},
+        )
+
+
+def check_lfs_assets_status() -> Tuple[bool, Dict[str, int]]:
+    """Checks file sizes of required ML/DB assets to distinguish real binaries from LFS text pointers."""
+    asset_files = [
+        ROOT_DIR / "data" / "ats_metadata.db",
+        ROOT_DIR / "data" / "bm25_index.pkl",
+        ROOT_DIR / "data" / "xgb_ranker.joblib",
+    ]
+    sizes = {}
+    all_ok = True
+    for f in asset_files:
+        if f.exists():
+            sz = os.path.getsize(f)
+            sizes[f.name] = sz
+            if sz <= 1000:  # LFS text pointer is ~130 bytes
+                all_ok = False
+        else:
+            sizes[f.name] = 0
+            all_ok = False
+    return all_ok, sizes
+
+
+def validate_uploaded_file(content: bytes, filename: str) -> None:
+    """Enforces size limits, extension matching, magic bytes, and page caps."""
+    if len(content) > MAX_UPLOAD_SIZE_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File exceeds maximum allowed size ({MAX_UPLOAD_SIZE_BYTES // (1024 * 1024)}MB).",
+        )
+
+    ext = Path(filename).suffix.lower()
+    if ext == ".pdf":
+        if not content.startswith(b"%PDF-"):
+            raise HTTPException(status_code=400, detail="Corrupted or invalid PDF magic bytes.")
+        try:
+            import fitz
+            doc = fitz.open(stream=content, filetype="pdf")
+            if doc.page_count > MAX_PAGE_COUNT:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"PDF exceeds maximum allowed length of {MAX_PAGE_COUNT} pages (received {doc.page_count}).",
+                )
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Unreadable PDF document: {e}")
+    elif ext == ".docx":
+        if not content.startswith(b"PK\x03\x04"):
+            raise HTTPException(status_code=400, detail="Corrupted or invalid DOCX magic bytes.")
+        try:
+            with zipfile.ZipFile(io.BytesIO(content)) as zf:
+                # 1. Must contain word/document.xml — otherwise it's not a valid DOCX
+                member_names = {info.filename for info in zf.infolist()}
+                if "word/document.xml" not in member_names:
+                    raise HTTPException(
+                        status_code=400,
+                        detail="Invalid DOCX file: missing word/document.xml (not a Word document).",
+                    )
+                # 2. Cap total uncompressed size to guard against zip-bomb
+                total_uncompressed = sum(info.file_size for info in zf.infolist())
+                if total_uncompressed > MAX_DOCX_UNCOMPRESSED_BYTES:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            f"DOCX uncompressed content exceeds maximum allowed size "
+                            f"({MAX_DOCX_UNCOMPRESSED_BYTES // (1024 * 1024)}MB)."
+                        ),
+                    )
+        except HTTPException:
+            raise
+        except zipfile.BadZipFile:
+            raise HTTPException(status_code=400, detail="Corrupted DOCX file: could not open as ZIP archive.")
+        except Exception as exc:
+            raise HTTPException(status_code=400, detail=f"Unreadable DOCX document: {exc}")
+    elif ext == ".txt":
+        try:
+            decoded = content.decode("utf-8")
+            if "\x00" in decoded:
+                raise HTTPException(status_code=400, detail="Invalid text file: binary NUL byte detected.")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid text file: cannot decode as UTF-8.")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file format. Please upload PDF, DOCX, or TXT.")
+
+
 # Reference client build path
 REF_CLIENT_DIST = Path(r"C:\Users\LENOVO\Downloads\Resume Screening and Shortlisting agent\Resume Screening and Shortlisting agent\e2e-chatbot-app-next\client\dist")
 
@@ -58,6 +215,8 @@ extraction_adapter = ExtractionAdapter(
 async def lifespan(app: FastAPI):
     """Lifespan context manager for FastAPI startup and shutdown."""
     logger.info("[Server] Lifespan startup: Starting ExtractionService...")
+    assets_ok, asset_sizes = check_lfs_assets_status()
+    logger.info("[Server] LFS assets verification on boot: assets_ok=%s, sizes=%s", assets_ok, asset_sizes)
     try:
         await extraction_service.start()
         logger.info("[Server] ExtractionService started successfully.")
@@ -77,14 +236,29 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Enable CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origin_regex=".*",
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Enable CORS restricted to configured origins
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS")
+if allowed_origins_env:
+    origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    origin_regex = os.getenv(
+        "ALLOWED_ORIGIN_REGEX",
+        r"^https?://(localhost|127\.0\.0\.1)(:\d+)?$|^https://.*\.onrender\.com$|^https://.*\.hf\.space$",
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=origin_regex,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 @app.get("/")
 def root():
@@ -97,7 +271,18 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "service": "Hybrid Semantic ATS"}
+    assets_ok, _ = check_lfs_assets_status()
+    rss_mb = extraction_service.get_current_rss_mb()
+    return {
+        "status": "healthy",
+        "service": "Hybrid Semantic ATS",
+        "assets_ok": assets_ok,
+        "model_loaded": extraction_service.is_model_loaded,
+        "shadow_enabled": extraction_service.is_shadow_mode_active,
+        "queue_depth": extraction_service.queue_depth,
+        "rss_mb": round(rss_mb, 2),
+        "cutover_percentage": extraction_service.current_cutover_percentage,
+    }
 
 @app.get("/api/session")
 async def get_session(request: Request):
@@ -439,11 +624,47 @@ async def delete_candidate_endpoint(candidate_id: str, request: Request):
       2. DB row is deleted after Storage succeeds.
          - If DB deletion fails after Storage was removed, returns 207 (partial
            failure) with enough detail to identify and clean up the orphaned row.
+      3. ExtractionJobs rows for this candidate's fileHash are cleaned up.
+         - Failures here are non-fatal and logged; the main deletion result is returned.
     """
     _require_delete_auth(request)
     _supabase_required()
     try:
+        # First, resolve fileHash before deleting — needed for cascade cleanup
+        file_hash: Optional[str] = None
+        try:
+            candidate_detail = get_candidate(candidate_id, include_resume_text=False)
+            file_hash = candidate_detail.get("fileHash")
+        except Exception:
+            pass  # Non-fatal; we still attempt deletion
+
         result = delete_candidate(candidate_id)
+
+        # Cascade: delete ExtractionJobs rows and clear extractedData for the same fileHash
+        if file_hash and is_supabase_configured():
+            from app.storage.supabase_client import get_supabase_client
+            from app.storage.resume_storage import _get_table_ref as _storage_table_ref
+
+            try:
+                from app.storage.candidate_repository import _get_table_ref as _repo_table_ref
+                client = get_supabase_client()
+                if client:
+                    # Delete all ExtractionJobs for this fileHash
+                    _repo_table_ref(client, "ExtractionJobs").delete().eq("fileHash", file_hash).execute()
+                    logger.info("[API] Deleted ExtractionJobs for fileHash %s (candidate %s)", file_hash[:12], candidate_id)
+
+                    # Clear extractedData + extractorVersion on CandidateResume (may be absent after delete)
+                    # Swallow 404-equivalent; the row was just deleted
+                    _repo_table_ref(client, "CandidateResume").update({
+                        "extractedData": None,
+                        "extractorVersion": None,
+                    }).eq("fileHash", file_hash).execute()
+            except Exception as cascade_err:
+                logger.warning(
+                    "[API] Cascade cleanup failed for fileHash %s (candidate %s): %s",
+                    file_hash[:12] if file_hash else "?", candidate_id, cascade_err,
+                )
+
         return result
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
@@ -488,22 +709,37 @@ async def delete_candidate_endpoint(candidate_id: str, request: Request):
 
 @app.post("/extract")
 async def extract_resume_endpoint(
+    request: Request,
     file: UploadFile = File(...),
 ):
     """
     Submits a resume file for async structured extraction:
-    - If file_hash is already cached in Supabase: returns 200 with cached payload immediately.
-    - If extraction queue is full: returns 429 Too Many Requests.
-    - Otherwise: returns 202 Accepted with job_id for polling.
+    - Requires X-ATS-Internal-Secret header (set via env var on HF Space)
+    - Enforces global rate limiting (env-configurable, default 120 req/min)
+    - Validates file size cap (5MB) and magic bytes (PDF, DOCX, TXT) and page cap (15 pages)
+    - Returns 200 (cache hit with full extracted schema) or 202 (queued/deduplicated) or 429 (queue full/rate limit)
+    - Never exposes internal storageObjectPath
     """
+    # 1. Internal secret authentication (Node proxy must forward X-ATS-Internal-Secret)
+    verify_internal_secret(request)
+
+    # 2. Global Rate Limiting (safety net; per-user limiting is Node layer's job)
+    if not check_rate_limit("global:extract", max_requests=RATE_LIMIT_GLOBAL_EXTRACT_MAX, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded for resume upload. Please slow down.")
+
     try:
         content = await file.read()
         if not content:
             raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
+        filename = file.filename or "uploaded_resume.pdf"
+
+        # 3. File Validation (magic bytes, size, page cap, DOCX zip-bomb)
+        validate_uploaded_file(content, filename)
+
         status_code, response_data = await extraction_service.submit_job(
             file_bytes=content,
-            filename=file.filename or "uploaded_resume.pdf",
+            filename=filename,
             content_type=file.content_type or "application/pdf",
         )
         return JSONResponse(status_code=status_code, content=response_data)
@@ -515,20 +751,32 @@ async def extract_resume_endpoint(
 
 
 @app.get("/jobs/{job_id}")
-async def get_job_status_endpoint(job_id: str):
+async def get_job_status_endpoint(job_id: str, request: Request):
     """
     Polls the status of an asynchronous resume extraction job.
-    Returns: status ('pending', 'processing', 'completed', 'failed') and result payload when complete.
+    - Requires X-ATS-Internal-Secret header
+    - Enforces global rate limiting (default 600 req/min)
+    - Returns: status ('pending', 'processing', 'completed', 'failed') and result payload when complete.
+    - Never exposes internal storageObjectPath
     """
+    verify_internal_secret(request)
+    if not check_rate_limit("global:jobs", max_requests=RATE_LIMIT_GLOBAL_JOBS_MAX, window_seconds=60):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded for job polling. Please slow down.")
+
     job = extraction_service.get_job(job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found.")
+
+    res_payload = job.get("result")
+    if res_payload and isinstance(res_payload, dict):
+        res_payload = dict(res_payload)
+        res_payload.pop("storageObjectPath", None)
 
     return {
         "job_id": job["id"],
         "status": job["status"],
         "extractionSource": job.get("extractionSource"),
-        "result": job.get("result"),
+        "result": res_payload,
         "error": job.get("error"),
         "created_at": job.get("created_at"),
         "updated_at": job.get("updated_at"),

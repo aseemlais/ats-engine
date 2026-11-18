@@ -1,0 +1,1381 @@
+{
+  "generatedAt": "2026-11-18T05:36:23.320981+00:00",
+  "totalSourceLogs": 35,
+  "targetSampleSize": 25,
+  "actualSampleSize": 25,
+  "distribution": {
+    "error": 1,
+    "hallucination": 1,
+    "disagreement": 16,
+    "agreement_control": 7
+  },
+  "reviewQueue": [
+    {
+      "id": "sample-uuid-13",
+      "fileHash": "hash_0013_12961",
+      "sampleCategory": "error",
+      "disagreementReasons": [
+        "invalid_json_format"
+      ],
+      "docFormat": "docx",
+      "pageCount": 2,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 13",
+        "email": "cand13@example.com",
+        "phone": "555-0113",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 16.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 13",
+        "email": "cand13@example.com",
+        "phone": "+1-555-0113",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 16.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-7",
+      "fileHash": "hash_0007_6979",
+      "sampleCategory": "hallucination",
+      "disagreementReasons": [
+        "ungrounded_entities(1): skill:QuantumComputing"
+      ],
+      "docFormat": "docx",
+      "pageCount": 2,
+      "createdAt": "2026-11-18T05:36:23.319597+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 7",
+        "email": "cand7@example.com",
+        "phone": "555-0107",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 10.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 7",
+        "email": "cand7@example.com",
+        "phone": "+1-555-0107",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 10.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": false,
+        "ungroundedEntities": [
+          "skill:QuantumComputing"
+        ]
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-15",
+      "fileHash": "hash_0015_14955",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "email_mismatch",
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "docx",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 15",
+        "email": "\u2014",
+        "phone": "555-0115",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 18.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 15 PhD",
+        "email": "cand15@example.com",
+        "phone": "+1-555-0115",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 18.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": false,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-20",
+      "fileHash": "hash_0020_19940",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "email_mismatch"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 3,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 20",
+        "email": "\u2014",
+        "phone": "555-0120",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 23.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 20",
+        "email": "cand20@example.com",
+        "phone": "+1-555-0120",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 23.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": false,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-10",
+      "fileHash": "hash_0010_9970",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "email_mismatch"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 2,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 10",
+        "email": "\u2014",
+        "phone": "555-0110",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 13.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 10",
+        "email": "cand10@example.com",
+        "phone": "+1-555-0110",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 13.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": false,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-12",
+      "fileHash": "hash_0012_11964",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 12",
+        "email": "cand12@example.com",
+        "phone": "555-0112",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 15.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 12 PhD",
+        "email": "cand12@example.com",
+        "phone": "+1-555-0112",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 15.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-30",
+      "fileHash": "hash_0030_29910",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "email_mismatch",
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 30",
+        "email": "\u2014",
+        "phone": "555-0130",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 33.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 30 PhD",
+        "email": "cand30@example.com",
+        "phone": "+1-555-0130",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 33.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": false,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-21",
+      "fileHash": "hash_0021_20937",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "docx",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 21",
+        "email": "cand21@example.com",
+        "phone": "555-0121",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 24.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 21 PhD",
+        "email": "cand21@example.com",
+        "phone": "+1-555-0121",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 24.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-25",
+      "fileHash": "hash_0025_24925",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "email_mismatch"
+      ],
+      "docFormat": "docx",
+      "pageCount": 2,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 25",
+        "email": "\u2014",
+        "phone": "555-0125",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 28.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 25",
+        "email": "cand25@example.com",
+        "phone": "+1-555-0125",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 28.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": false,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-18",
+      "fileHash": "hash_0018_17946",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 18",
+        "email": "cand18@example.com",
+        "phone": "555-0118",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 21.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 18 PhD",
+        "email": "cand18@example.com",
+        "phone": "+1-555-0118",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 21.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-3",
+      "fileHash": "hash_0003_2991",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "docx",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.319597+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 3",
+        "email": "cand3@example.com",
+        "phone": "555-0103",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 6.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 3 PhD",
+        "email": "cand3@example.com",
+        "phone": "+1-555-0103",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 6.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-5",
+      "fileHash": "hash_0005_4985",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "email_mismatch"
+      ],
+      "docFormat": "docx",
+      "pageCount": 3,
+      "createdAt": "2026-11-18T05:36:23.319597+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 5",
+        "email": "\u2014",
+        "phone": "555-0105",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 8.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 5",
+        "email": "cand5@example.com",
+        "phone": "+1-555-0105",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 8.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": false,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-27",
+      "fileHash": "hash_0027_26919",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "docx",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 27",
+        "email": "cand27@example.com",
+        "phone": "555-0127",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 30.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 27 PhD",
+        "email": "cand27@example.com",
+        "phone": "+1-555-0127",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 30.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-33",
+      "fileHash": "hash_0033_32901",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "docx",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 33",
+        "email": "cand33@example.com",
+        "phone": "555-0133",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 36.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 33 PhD",
+        "email": "cand33@example.com",
+        "phone": "+1-555-0133",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 36.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-9",
+      "fileHash": "hash_0009_8973",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "docx",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 9",
+        "email": "cand9@example.com",
+        "phone": "555-0109",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 12.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 9 PhD",
+        "email": "cand9@example.com",
+        "phone": "+1-555-0109",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 12.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-24",
+      "fileHash": "hash_0024_23928",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 24",
+        "email": "cand24@example.com",
+        "phone": "555-0124",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 27.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 24 PhD",
+        "email": "cand24@example.com",
+        "phone": "+1-555-0124",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 27.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-0",
+      "fileHash": "hash_0000_0",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "email_mismatch",
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.319597+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 0",
+        "email": "\u2014",
+        "phone": "555-0100",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 3.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 0 PhD",
+        "email": "cand0@example.com",
+        "phone": "+1-555-0100",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 3.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": false,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-6",
+      "fileHash": "hash_0006_5982",
+      "sampleCategory": "disagreement",
+      "disagreementReasons": [
+        "title_f1_low(0.50)",
+        "skills_jaccard_low(0.50)"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 1,
+      "createdAt": "2026-11-18T05:36:23.319597+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 6",
+        "email": "cand6@example.com",
+        "phone": "555-0106",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python"
+        ],
+        "totalExperienceYears": 9.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Dr. Candidate 6 PhD",
+        "email": "cand6@example.com",
+        "phone": "+1-555-0106",
+        "jobTitle": "Senior Backend Engineer (Go/K8s)",
+        "skills": [
+          "Python",
+          "Docker",
+          "Kubernetes"
+        ],
+        "totalExperienceYears": 9.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 0.5,
+        "skillsJaccard": 0.5,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-22",
+      "fileHash": "hash_0022_21934",
+      "sampleCategory": "agreement_control",
+      "disagreementReasons": [
+        "high_agreement_control"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 2,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 22",
+        "email": "cand22@example.com",
+        "phone": "555-0122",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 25.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 22",
+        "email": "cand22@example.com",
+        "phone": "+1-555-0122",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 25.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-28",
+      "fileHash": "hash_0028_27916",
+      "sampleCategory": "agreement_control",
+      "disagreementReasons": [
+        "high_agreement_control"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 2,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 28",
+        "email": "cand28@example.com",
+        "phone": "555-0128",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 31.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 28",
+        "email": "cand28@example.com",
+        "phone": "+1-555-0128",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 31.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-14",
+      "fileHash": "hash_0014_13958",
+      "sampleCategory": "agreement_control",
+      "disagreementReasons": [
+        "high_agreement_control"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 3,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 14",
+        "email": "cand14@example.com",
+        "phone": "555-0114",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 17.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 14",
+        "email": "cand14@example.com",
+        "phone": "+1-555-0114",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 17.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-2",
+      "fileHash": "hash_0002_1994",
+      "sampleCategory": "agreement_control",
+      "disagreementReasons": [
+        "high_agreement_control"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 3,
+      "createdAt": "2026-11-18T05:36:23.319597+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 2",
+        "email": "cand2@example.com",
+        "phone": "555-0102",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 5.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 2",
+        "email": "cand2@example.com",
+        "phone": "+1-555-0102",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 5.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-32",
+      "fileHash": "hash_0032_31904",
+      "sampleCategory": "agreement_control",
+      "disagreementReasons": [
+        "high_agreement_control"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 3,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 32",
+        "email": "cand32@example.com",
+        "phone": "555-0132",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 35.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 32",
+        "email": "cand32@example.com",
+        "phone": "+1-555-0132",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 35.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-4",
+      "fileHash": "hash_0004_3988",
+      "sampleCategory": "agreement_control",
+      "disagreementReasons": [
+        "high_agreement_control"
+      ],
+      "docFormat": "pdf",
+      "pageCount": 2,
+      "createdAt": "2026-11-18T05:36:23.319597+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 4",
+        "email": "cand4@example.com",
+        "phone": "555-0104",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 7.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 4",
+        "email": "cand4@example.com",
+        "phone": "+1-555-0104",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 7.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    },
+    {
+      "id": "sample-uuid-11",
+      "fileHash": "hash_0011_10967",
+      "sampleCategory": "agreement_control",
+      "disagreementReasons": [
+        "high_agreement_control"
+      ],
+      "docFormat": "docx",
+      "pageCount": 3,
+      "createdAt": "2026-11-18T05:36:23.320981+00:00",
+      "legacyOutput": {
+        "candidateName": "Candidate 11",
+        "email": "cand11@example.com",
+        "phone": "555-0111",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 14.0,
+        "education": [],
+        "workExperience": []
+      },
+      "slmOutput": {
+        "candidateName": "Candidate 11",
+        "email": "cand11@example.com",
+        "phone": "+1-555-0111",
+        "jobTitle": "Backend Engineer",
+        "skills": [
+          "Python",
+          "Docker"
+        ],
+        "totalExperienceYears": 14.0,
+        "education": [],
+        "workExperience": []
+      },
+      "groundingFlags": {
+        "allGrounded": true,
+        "ungroundedEntities": []
+      },
+      "validityFlags": {
+        "emailValid": true,
+        "phoneValid": true,
+        "namePlausible": true,
+        "datesParse": true
+      },
+      "fieldAgreements": {
+        "emailExactMatch": true,
+        "phoneExactMatch": true,
+        "titleTokenF1": 1.0,
+        "skillsJaccard": 1.0,
+        "expDeltaYears": 0.0
+      }
+    }
+  ]
+}

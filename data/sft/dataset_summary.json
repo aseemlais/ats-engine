@@ -1,0 +1,32 @@
+{
+  "train_samples": 200,
+  "val_samples": 40,
+  "test_samples": 40,
+  "gold_eval_samples": 20,
+  "total_generated": 300,
+  "train_templates": [
+    "single_column_pdf",
+    "docx"
+  ],
+  "val_templates": [
+    "docx",
+    "two_column_pdf"
+  ],
+  "test_templates": [
+    "two_column_pdf"
+  ],
+  "gold_templates": [
+    "single_column_pdf",
+    "two_column_pdf",
+    "docx"
+  ],
+  "edge_case_profiles": [
+    "standard",
+    "parenthesized_title",
+    "fresher",
+    "overlapping",
+    "career_gap",
+    "missing_contact"
+  ],
+  "output_directory": "C:\\Users\\LENOVO\\.gemini\\antigravity\\scratch\\ai-ats-10k-resumes\\data/sft"
+}

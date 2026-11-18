@@ -1,0 +1,36 @@
+{
+  "fine_tuned": {
+    "runner_name": "Fine-Tuned Model (Qwen2.5-1.5B)",
+    "total_samples": 20,
+    "schema_validity_rate": 100.0,
+    "email_exact_match_pct": 95.0,
+    "email_null_true_positives": 1,
+    "email_null_false_positives": 0,
+    "phone_exact_match_pct": 95.0,
+    "title_mean_f1": 1.0,
+    "title_parentheses_total": 11,
+    "title_truncation_errors": 0,
+    "skills_mean_f1": 1.0,
+    "experience_mae_years": 0.0,
+    "hallucination_count": 0,
+    "latency_p50_ms": 0.0,
+    "latency_p95_ms": 0.0
+  },
+  "legacy": {
+    "runner_name": "Legacy Regex/Heuristic",
+    "total_samples": 20,
+    "schema_validity_rate": 100.0,
+    "email_exact_match_pct": 95.0,
+    "email_null_true_positives": 1,
+    "email_null_false_positives": 0,
+    "phone_exact_match_pct": 25.0,
+    "title_mean_f1": 0.73,
+    "title_parentheses_total": 11,
+    "title_truncation_errors": 0,
+    "skills_mean_f1": 0.537,
+    "experience_mae_years": 5.447,
+    "hallucination_count": 0,
+    "latency_p50_ms": 6.97,
+    "latency_p95_ms": 12.75
+  }
+}

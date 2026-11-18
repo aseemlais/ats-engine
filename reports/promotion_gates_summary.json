@@ -1,0 +1,87 @@
+{
+  "auditTimestamp": "2026-11-18T05:36:03.578337+00:00",
+  "overallVerdict": "PASS - READY FOR STAGE 5 (CANARY CUTOVER)",
+  "gates": {
+    "gate1_labeled_accuracy": {
+      "status": "PASS",
+      "total_labeled": 12,
+      "all_critical_fields_pass": true,
+      "field_scores": {
+        "candidateName": {
+          "slm_pct": 100.0,
+          "legacy_pct": 100.0,
+          "delta_pct": 0.0,
+          "pass": true
+        },
+        "email": {
+          "slm_pct": 100.0,
+          "legacy_pct": 75.0,
+          "delta_pct": 25.0,
+          "pass": true
+        },
+        "phone": {
+          "slm_pct": 100.0,
+          "legacy_pct": 100.0,
+          "delta_pct": 0.0,
+          "pass": true
+        },
+        "jobTitle": {
+          "slm_pct": 100.0,
+          "legacy_pct": 66.67,
+          "delta_pct": 33.33,
+          "pass": true
+        },
+        "totalExperienceYears": {
+          "slm_pct": 100.0,
+          "legacy_pct": 100.0,
+          "delta_pct": 0.0,
+          "pass": true
+        }
+      },
+      "bug_classes": {
+        "title_truncation_preserved": {
+          "count": 4,
+          "pass": true
+        },
+        "em_dash_emails_eliminated": {
+          "count": 3,
+          "pass": true
+        },
+        "null_string_handling": {
+          "count": 0,
+          "pass": true
+        }
+      },
+      "message": "SLM is >= Legacy across all critical fields."
+    },
+    "gate2_error_rate": {
+      "status": "PASS",
+      "total_error_rate_pct": 0.0,
+      "invalid_json_rate_pct": 0.0,
+      "timeout_rate_pct": 0.0,
+      "threshold_pct": 1.0,
+      "message": "Error rate 0.00% is within acceptable limit (<1.0%)."
+    },
+    "gate3_memory_safety": {
+      "status": "PASS",
+      "memory_guard_incidents": 0,
+      "message": "Zero memory-guard trips recorded on Space."
+    },
+    "gate4_grounding_hallucination": {
+      "status": "PASS",
+      "hallucination_rate_pct": 0.0,
+      "grounded_rate_pct": 100.0,
+      "threshold_pct": 2.0,
+      "ungrounded_entities": {},
+      "message": "Hallucination rate 0.00% is below ceiling (<2.0%)."
+    },
+    "gate5_ranking_impact": {
+      "status": "PASS",
+      "report_exists": true,
+      "max_score_delta": 2.94,
+      "mean_score_delta": 0.83,
+      "spearman_rank_correlation": 1.0,
+      "message": "Ranking impact audit verified. Spearman correlation=1.000 with no unexpected disruptions."
+    }
+  }
+}

@@ -54,10 +54,28 @@ class ExtractionAdapter:
         primary_result: Dict[str, Any]
         primary_mode: str
 
-        if self.is_new_extractor_enabled and self.extraction_service:
+        import hashlib
+        file_hash = hashlib.sha256(text_to_extract.encode("utf-8")).hexdigest()
+
+        should_slm = False
+        if self.extraction_service and hasattr(self.extraction_service, "should_route_to_slm"):
+            should_slm = self.extraction_service.should_route_to_slm(file_hash)
+        else:
+            should_slm = self.is_new_extractor_enabled
+
+        if should_slm and self.extraction_service:
             try:
                 logger.info("[ExtractionAdapter] Routing through new fine-tuned SLM extractor...")
-                raw_data = self.extraction_service._infer_llm(text_to_extract)
+                infer_out = self.extraction_service._infer_llm(text_to_extract)
+                raw_data = None
+                if infer_out:
+                    if isinstance(infer_out, tuple):
+                        d, reason = infer_out
+                        if reason != "length" and isinstance(d, dict):
+                            raw_data = d
+                    elif isinstance(infer_out, dict):
+                        raw_data = infer_out
+
                 if raw_data and isinstance(raw_data, dict):
                     processed = post_process_resume(raw_data)
                     primary_result = processed.model_dump(by_alias=True)
@@ -65,9 +83,9 @@ class ExtractionAdapter:
                     primary_result["source"] = "qwen2.5-1.5b-instruct"
                     primary_mode = "slm"
                     logger.info(
-                        "[ExtractionAdapter] Extraction completed via 'slm'. Candidate: '%s', Role: '%s'",
-                        primary_result.get("candidateName"),
-                        primary_result.get("jobTitle"),
+                        "[ExtractionAdapter] Extraction completed via 'slm'. (skills: %d, exp: %.1f yrs)",
+                        len(primary_result.get("skills") or []),
+                        float(primary_result.get("totalExperienceYears") or 0.0),
                     )
 
                     if self.is_shadow_mode_enabled:
@@ -83,9 +101,9 @@ class ExtractionAdapter:
             primary_result = self.legacy_extractor.extract(raw_text=text_to_extract, cleaned_text=cleaned_text)
             primary_result["extractionSource"] = "fallback"
             logger.info(
-                "[ExtractionAdapter] Extraction completed via 'fallback'. Candidate: '%s', Role: '%s'",
-                primary_result.get("candidateName"),
-                primary_result.get("jobTitle"),
+                "[ExtractionAdapter] Extraction completed via 'fallback'. (skills: %d, exp: %.1f yrs)",
+                len(primary_result.get("skills") or []),
+                float(primary_result.get("totalExperienceYears") or 0.0),
             )
             return primary_result
 
@@ -93,9 +111,9 @@ class ExtractionAdapter:
         primary_result = self.legacy_extractor.extract(raw_text=text_to_extract, cleaned_text=cleaned_text)
         primary_result["extractionSource"] = "legacy"
         logger.info(
-            "[ExtractionAdapter] Extraction completed via 'legacy'. Candidate: '%s', Role: '%s'",
-            primary_result.get("candidateName"),
-            primary_result.get("jobTitle"),
+            "[ExtractionAdapter] Extraction completed via 'legacy'. (skills: %d, exp: %.1f yrs)",
+            len(primary_result.get("skills") or []),
+            float(primary_result.get("totalExperienceYears") or 0.0),
         )
 
         if self.is_shadow_mode_enabled:
@@ -109,11 +127,34 @@ class ExtractionAdapter:
         primary_result: Dict[str, Any],
         primary_mode: str,
     ) -> None:
-        """Launches alternate extractor in background daemon thread to avoid slowing client response."""
+        """Enqueues shadow job into the single prioritized ExtractionService queue, or runs via thread fallback."""
+        import hashlib
+        file_hash = hashlib.sha256(text_to_extract.encode("utf-8")).hexdigest()
+
+        if self.extraction_service and hasattr(self.extraction_service, "enqueue_shadow_job"):
+            enqueued = self.extraction_service.enqueue_shadow_job(
+                file_hash=file_hash,
+                text_to_extract=text_to_extract,
+                primary_output=primary_result,
+                primary_source=primary_mode,
+            )
+            if enqueued:
+                return
+
+        # Fallback daemon thread if service queue is unavailable
         def _shadow_worker():
             try:
                 if primary_mode == "legacy" and self.extraction_service:
-                    raw_data = self.extraction_service._infer_llm(text_to_extract)
+                    infer_out = self.extraction_service._infer_llm(text_to_extract)
+                    raw_data = None
+                    if infer_out:
+                        if isinstance(infer_out, tuple):
+                            d, reason = infer_out
+                            if reason != "length" and isinstance(d, dict):
+                                raw_data = d
+                        elif isinstance(infer_out, dict):
+                            raw_data = infer_out
+
                     if raw_data and isinstance(raw_data, dict):
                         processed = post_process_resume(raw_data)
                         shadow_result = processed.model_dump(by_alias=True)
@@ -182,15 +223,13 @@ class ExtractionAdapter:
         self.latest_shadow_diff = diff
 
         logger.info(
-            "[ShadowMode] Diff [%s vs %s] | Name: '%s' vs '%s' | Title: '%s' vs '%s' | Email: '%s' vs '%s' | ExpDelta: %.1f yrs | Skills Jaccard: %.2f (+%d, -%d)",
+            "[ShadowMode] Diff [%s vs %s] | Name match: %s | Title match: %s | Email match: %s | Phone match: %s | ExpDelta: %.1f yrs | Skills Jaccard: %.2f (+%d, -%d)",
             primary_name,
             shadow_name,
-            name_p,
-            name_s,
-            title_p,
-            title_s,
-            email_p,
-            email_s,
+            name_p == name_s,
+            title_p == title_s,
+            email_p == email_s,
+            phone_p == phone_s,
             exp_delta,
             jaccard,
             len(added_in_shadow),
