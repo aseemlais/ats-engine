@@ -1,5 +1,5 @@
 # ATS Resume Extractor: Production Promotion Gate Audit (Stage 4 -> Stage 5)
-**Audit Date:** 2026-11-18T05:36:03.578337+00:00 | **Overall Recommendation:** **PASS - READY FOR STAGE 5 (CANARY CUTOVER)**
+**Audit Date:** 2026-11-18T08:06:27.221900+00:00 | **Overall Recommendation:** **BLOCKED - GATES FAILED**
 
 ## Summary of Promotion Gates
 | Gate # | Promotion Requirement | Current Metric | Gate Status |
@@ -7,7 +7,7 @@
 | **Gate 1** | Labeled Set: SLM >= Legacy across all critical fields & bug classes | SLM is >= Legacy across all critical fields. | **🟢 PASS** |
 | **Gate 2** | Reliability: Invalid JSON + Upstream Timeouts < 1.0% | Error Rate: 0.0% | **🟢 PASS** |
 | **Gate 3** | Memory Safety: Zero Memory Guard Incidents on Space | Trips: 0 | **🟢 PASS** |
-| **Gate 4** | Grounding: Hallucination Rate < 2.0% | Hallucination Rate: 0.0% | **🟢 PASS** |
+| **Gate 4** | Grounding: Hallucination Rate < 2.0% | Hallucination Rate: 100.0% | **🔴 FAIL** |
 | **Gate 5** | Downstream Integrity: Ranking Impact Verified | Spearman Rank Corr: 1.0 | **🟢 PASS** |
 
 ## Gate 1 Breakdown: Field-Level Agreement & Known Bug Classes

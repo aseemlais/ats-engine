@@ -390,6 +390,12 @@ def process_resume_upload(
                     )
                     skills = parsed_cand.skills
 
+                current_ver = (
+                    extraction_service.current_extractor_version
+                    if extraction_service
+                    else "ats-slm:qwen2.5-1.5b-instruct:chatml-v1:schema-v1"
+                )
+
                 storage_res = store_resume(
                     file_bytes=content,
                     filename=filename,
@@ -399,7 +405,10 @@ def process_resume_upload(
                     resume_text=text_to_return,
                     skills=skills or [],
                     job_role=candidate_role,
-                    content_type=content_type or "application/pdf"
+                    content_type=content_type or "application/pdf",
+                    extracted_data=extracted,
+                    extractor_version=current_ver,
+                    extraction_source=extracted.get("extractionSource", "legacy"),
                 )
 
                 response_payload.update({
@@ -409,6 +418,9 @@ def process_resume_upload(
                     "storageObjectPath": storage_res.get("storageObjectPath"),
                     "candidateName": storage_res.get("candidateName"),
                     "jobRole": storage_res.get("jobRole"),
+                    "extractedData": extracted,
+                    "extractorVersion": current_ver,
+                    "extractionSource": extracted.get("extractionSource", "legacy"),
                 })
             except Exception as store_err:
                 logger.error(

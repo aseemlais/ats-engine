@@ -1,6 +1,6 @@
 {
-  "auditTimestamp": "2026-11-18T05:36:03.578337+00:00",
-  "overallVerdict": "PASS - READY FOR STAGE 5 (CANARY CUTOVER)",
+  "auditTimestamp": "2026-11-18T08:06:27.221900+00:00",
+  "overallVerdict": "BLOCKED - GATES FAILED",
   "gates": {
     "gate1_labeled_accuracy": {
       "status": "PASS",
@@ -68,12 +68,14 @@
       "message": "Zero memory-guard trips recorded on Space."
     },
     "gate4_grounding_hallucination": {
-      "status": "PASS",
-      "hallucination_rate_pct": 0.0,
-      "grounded_rate_pct": 100.0,
+      "status": "FAIL",
+      "hallucination_rate_pct": 100.0,
+      "grounded_rate_pct": 0.0,
       "threshold_pct": 2.0,
-      "ungrounded_entities": {},
-      "message": "Hallucination rate 0.00% is below ceiling (<2.0%)."
+      "ungrounded_entities": {
+        "skill": 1
+      },
+      "message": "Hallucination rate 100.00% exceeds threshold (<2.0%)."
     },
     "gate5_ranking_impact": {
       "status": "PASS",

@@ -98,7 +98,10 @@ class ExtractionAdapter:
                 logger.warning("[ExtractionAdapter] New extractor failed with error: %s. Falling back to legacy.", exc)
 
             # Fallback path when new extractor was enabled but failed
-            primary_result = self.legacy_extractor.extract(raw_text=text_to_extract, cleaned_text=cleaned_text)
+            raw_fallback = self.legacy_extractor.extract(raw_text=text_to_extract, cleaned_text=cleaned_text)
+            processed = post_process_resume(raw_fallback)
+            primary_result = processed.model_dump(by_alias=True)
+            primary_result["jobRole"] = primary_result.get("jobTitle")
             primary_result["extractionSource"] = "fallback"
             logger.info(
                 "[ExtractionAdapter] Extraction completed via 'fallback'. (skills: %d, exp: %.1f yrs)",
@@ -108,7 +111,10 @@ class ExtractionAdapter:
             return primary_result
 
         # Legacy primary path (USE_NEW_EXTRACTOR=false)
-        primary_result = self.legacy_extractor.extract(raw_text=text_to_extract, cleaned_text=cleaned_text)
+        raw_legacy = self.legacy_extractor.extract(raw_text=text_to_extract, cleaned_text=cleaned_text)
+        processed = post_process_resume(raw_legacy)
+        primary_result = processed.model_dump(by_alias=True)
+        primary_result["jobRole"] = primary_result.get("jobTitle")
         primary_result["extractionSource"] = "legacy"
         logger.info(
             "[ExtractionAdapter] Extraction completed via 'legacy'. (skills: %d, exp: %.1f yrs)",
