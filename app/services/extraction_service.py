@@ -248,15 +248,25 @@ class ExtractionService:
         Background startup task: downloads GGUF via huggingface_hub if repo id is specified,
         and initializes llama_cpp in a thread so /health passes immediately on boot.
         """
-        repo_id = os.getenv("GGUF_REPO_ID")
-        filename = os.getenv("GGUF_FILENAME", "unsloth.Q4_K_M.gguf")
+        repo_id = os.getenv("GGUF_REPO_ID", "Qwen/Qwen2.5-1.5B-Instruct-GGUF")
+        if not repo_id or repo_id.strip() == "" or "unsloth" in repo_id.lower():
+            repo_id = "Qwen/Qwen2.5-1.5B-Instruct-GGUF"
+
+        filename = os.getenv("GGUF_FILENAME", "qwen2.5-1.5b-instruct-q4_k_m.gguf")
+        if not filename or filename.strip() == "" or "unsloth" in filename.lower():
+            filename = "qwen2.5-1.5b-instruct-q4_k_m.gguf"
+        if repo_id == "Qwen/Qwen2.5-1.5B-Instruct-GGUF":
+            filename = filename.lower()
+
         token = os.getenv("HF_TOKEN")
 
-        if repo_id and (not self.model_path or not os.path.exists(self.model_path)):
+        dest_dir = "models"
+        target_path = os.path.join(dest_dir, filename)
+
+        if not os.path.exists(target_path):
             try:
                 logger.info("[ExtractionService] Downloading GGUF from Hugging Face Hub (%s/%s)...", repo_id, filename)
                 from huggingface_hub import hf_hub_download
-                dest_dir = os.path.dirname(self.model_path) if self.model_path else "models"
                 os.makedirs(dest_dir, exist_ok=True)
                 downloaded = await asyncio.to_thread(
                     hf_hub_download,
@@ -269,6 +279,9 @@ class ExtractionService:
                 logger.info("[ExtractionService] Downloaded GGUF to %s", self.model_path)
             except Exception as dl_err:
                 logger.warning("[ExtractionService] Failed to download GGUF from %s: %s. Using fallback mode.", repo_id, dl_err)
+        else:
+            self.model_path = target_path
+            logger.info("[ExtractionService] Found existing GGUF model at %s", self.model_path)
 
         if self.model_path and os.path.exists(self.model_path):
             try:

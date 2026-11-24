@@ -270,14 +270,21 @@ def root():
     }
 
 @app.get("/health")
-def health():
+async def health():
+    if not extraction_service.running or not extraction_service.is_model_loaded:
+        await extraction_service.ensure_worker()
     assets_ok, _ = check_lfs_assets_status()
     rss_mb = extraction_service.get_current_rss_mb()
+    is_loading = (
+        extraction_service.model_loader_task is not None
+        and not extraction_service.model_loader_task.done()
+    )
     return {
         "status": "healthy",
         "service": "Hybrid Semantic ATS",
         "assets_ok": assets_ok,
         "model_loaded": extraction_service.is_model_loaded,
+        "model_loading": is_loading,
         "shadow_enabled": extraction_service.is_shadow_mode_active,
         "queue_depth": extraction_service.queue_depth,
         "rss_mb": round(rss_mb, 2),

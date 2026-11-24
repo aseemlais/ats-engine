@@ -52,4 +52,10 @@ if __name__ == "__main__":
     # Expose all ATS FastAPI routes on the running server
     for route in fastapi_app.routes:
         app.routes.append(route)
+    # Warm up /health immediately on boot to trigger ensure_worker() on server loop
+    try:
+        import urllib.request
+        urllib.request.urlopen(f"http://127.0.0.1:{port}/health", timeout=5)
+    except Exception:
+        pass
     demo.block_thread()
