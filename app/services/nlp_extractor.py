@@ -187,6 +187,12 @@ class NLPExtractorService:
         """Heuristic name extraction from the header of the resume."""
         fixed_text = ftfy.fix_text(text)
         lines = [line.strip() for line in fixed_text.splitlines() if line.strip()]
+        title_keywords = {
+            "developer", "engineer", "architect", "manager", "lead", "consultant",
+            "analyst", "specialist", "administrator", "scientist", "intern", "internship",
+            "backend", "frontend", "fullstack", "full-stack", "devops", "designer",
+            "programmer", "officer", "director", "head", "expert", "tester", "qa"
+        }
         for line in lines[:8]:
             line = re.sub(r"^['\"]+|['\"]+$", "", line).strip()
             # Filter out lines that look like emails, URLs, phones, or section headings
@@ -196,10 +202,16 @@ class NLPExtractorService:
                 continue
             if re.search(r"\b(objective|summary|resume|curriculum|vitae|contact)\b", line, re.I):
                 continue
-            # Must contain letters, mostly alphabetic
-            words = line.split()
-            if 1 <= len(words) <= 4 and all(re.match(r"^[a-zA-Z\.]+$", w) for w in words):
-                return line.title()
+            # Handle lines with multiple components separated by tabs, multiple spaces, or pipes
+            # e.g. "Java Backend Developer    Shashi Bawa"
+            subparts = [p.strip() for p in re.split(r"\s{2,}|\t+|\|", line) if p.strip()]
+            for part in subparts:
+                words = part.split()
+                if 1 <= len(words) <= 4 and all(re.match(r"^[a-zA-Z\.\'-]+$", w) for w in words):
+                    # Reject if component contains job title words
+                    if any(w.lower() in title_keywords for w in words):
+                        continue
+                    return part.title()
         return "Unknown"
 
     def extract_contact(self, text: str) -> Tuple[Optional[str], Optional[str]]:

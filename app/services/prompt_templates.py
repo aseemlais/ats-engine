@@ -27,7 +27,9 @@ EXTRACTION_SYSTEM_PROMPT = (
     '  "projects": ["Project Name: Description"]\n'
     "}\n"
     "IMPORTANT RULES:\n"
-    "- 'jobTitle': Extract ONLY the professional title (e.g. 'Generative AI Intern' or 'Software Engineer'). DO NOT include company names, pipe characters ('|'), locations, or modalities like '(On-site Intern)'.\n"
+    "- 'candidateName': Extract the person's actual human name (e.g. 'Shashi Bawa'). NEVER extract job titles, roles, or banners (e.g. 'Java Backend Developer' is a job title, NOT a name).\n"
+    "- 'jobTitle': Extract ONLY the professional title (e.g. 'Java Backend Developer' or 'Generative AI Intern'). DO NOT include company names, pipe characters ('|'), locations, or modalities like '(On-site Intern)'.\n"
+    "- When a header line contains both a job title and a candidate name (e.g. 'Java Backend Developer    Shashi Bawa'): candidateName MUST be 'Shashi Bawa' and jobTitle MUST be 'Java Backend Developer'.\n"
     "- 'education', 'workExperience', and 'projects' MUST be arrays/lists of objects, NEVER dictionary mappings.\n"
     "- Return ONLY raw minified JSON. Do not include markdown codeblocks (no ```json), explanations, or preambles."
 )

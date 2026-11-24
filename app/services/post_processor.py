@@ -260,6 +260,70 @@ def clean_title(title_str: Optional[str]) -> Optional[str]:
     return cleaned
 
 
+TITLE_ROLE_KEYWORDS = {
+    "developer", "engineer", "architect", "manager", "lead", "consultant",
+    "analyst", "specialist", "administrator", "scientist", "intern", "internship",
+    "backend", "frontend", "fullstack", "full-stack", "devops", "designer",
+    "programmer", "officer", "director", "head", "expert", "tester", "qa",
+    "practitioner", "technician", "instructor", "researcher", "coordinator",
+    "executive", "president", "vp", "trainee", "associate"
+}
+
+
+def is_title_not_name(name_str: Optional[str]) -> bool:
+    """Detects if an extracted candidate name is actually a job title (e.g. 'Java Backend Developer')."""
+    if not name_str:
+        return False
+    words = re.findall(r"[a-zA-Z]+", name_str.lower())
+    return any(w in TITLE_ROLE_KEYWORDS for w in words)
+
+
+def recover_name_and_title_from_text(
+    resume_text: str, email: Optional[str] = None
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    Recovers candidate name and title from raw resume header lines,
+    especially when formatted as 'Title    Name' (e.g. 'Java Backend Developer    Shashi Bawa').
+    """
+    if not resume_text:
+        return None, None
+
+    lines = [line.strip() for line in resume_text.splitlines() if line.strip()][:10]
+    cand_name = None
+    job_title = None
+
+    # Check for split lines with multiple components
+    for line in lines:
+        parts = [p.strip() for p in re.split(r"\s{2,}|\t+|\|", line) if p.strip()]
+        if len(parts) >= 2:
+            for part in parts:
+                if is_title_not_name(part):
+                    if not job_title:
+                        job_title = part
+                else:
+                    words = part.split()
+                    if 1 <= len(words) <= 4 and all(re.match(r"^[a-zA-Z\.\'-]+$", w) for w in words):
+                        if not cand_name:
+                            cand_name = part.title()
+            if cand_name:
+                break
+
+    # If cand_name still not found, check lines against email username
+    if not cand_name and email:
+        email_user = email.split("@")[0].lower()
+        email_clean = re.sub(r"[0-9_\.\-]+", "", email_user)
+        for line in lines:
+            if not is_title_not_name(line) and "@" not in line and "http" not in line and "cell" not in line.lower():
+                words = [w for w in line.split() if re.match(r"^[a-zA-Z]+$", w)]
+                if 2 <= len(words) <= 4:
+                    combined = "".join(words).lower()
+                    if combined in email_clean or email_clean in combined:
+                        cand_name = " ".join(words).title()
+                        break
+
+    return cand_name, job_title
+
+
 def map_degree_tier(degree_name: Optional[str]) -> DegreeTier:
     """
     Classifies a raw degree string into a canonical degree tier:
@@ -474,6 +538,7 @@ def sum_merged_intervals_years(intervals: List[Tuple[datetime, datetime]]) -> fl
 def post_process_resume(
     raw_input: Union[RawResumeExtraction, Dict[str, Any]],
     reference_date: Optional[datetime] = None,
+    raw_text: Optional[str] = None,
 ) -> ProcessedResume:
     """
     Deterministic post-processing pipeline for resume extraction.
@@ -492,6 +557,7 @@ def post_process_resume(
 
     # Coerce dict to RawResumeExtraction model
     if isinstance(raw_input, dict):
+        raw_text = raw_text or raw_input.get("resumeText") or raw_input.get("rawText")
         raw = RawResumeExtraction.model_validate(raw_input)
     else:
         raw = raw_input
@@ -517,6 +583,21 @@ def post_process_resume(
 
     # 4. Job Title
     job_title = clean_title(raw.job_title)
+
+    # Semantic Disambiguation: Detect if cand_name is actually a job title (e.g. 'Java Backend Developer')
+    if cand_name and is_title_not_name(cand_name):
+        misplaced_title = cand_name
+        cand_name = None
+        if not job_title or job_title in ("Role not identified", "Unknown"):
+            job_title = clean_title(misplaced_title)
+
+    # If cand_name is missing, recover from raw_text using header lines and email prefix
+    if not cand_name and raw_text:
+        rec_name, rec_title = recover_name_and_title_from_text(raw_text, email=email)
+        if rec_name:
+            cand_name = rec_name
+        if rec_title and (not job_title or job_title in ("Role not identified", "Unknown")):
+            job_title = clean_title(rec_title)
 
     # 5. Work Experience & Date Math
     processed_experience: List[WorkExperienceItem] = []
