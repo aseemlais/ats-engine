@@ -71,7 +71,7 @@ class ExtractionAdapter:
                 if infer_out:
                     if isinstance(infer_out, tuple):
                         d, reason = infer_out
-                        if reason != "length" and isinstance(d, dict):
+                        if isinstance(d, dict):
                             raw_data = d
                     elif isinstance(infer_out, dict):
                         raw_data = infer_out
@@ -156,7 +156,7 @@ class ExtractionAdapter:
                     if infer_out:
                         if isinstance(infer_out, tuple):
                             d, reason = infer_out
-                            if reason != "length" and isinstance(d, dict):
+                            if isinstance(d, dict):
                                 raw_data = d
                         elif isinstance(infer_out, dict):
                             raw_data = infer_out

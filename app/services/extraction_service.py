@@ -230,10 +230,11 @@ class ExtractionService:
         try:
             import llama_cpp
             logger.info("[ExtractionService] Loading GGUF model from %s...", self.model_path)
+            threads = int(os.getenv("LLAMA_THREADS", str(min(4, os.cpu_count() or 2))))
             self.llm = llama_cpp.Llama(
                 model_path=self.model_path,
                 n_ctx=4096,
-                n_threads=int(os.getenv("LLAMA_THREADS", "2")),
+                n_threads=threads,
                 verbose=False,
             )
             self.model_loaded = True
@@ -287,7 +288,7 @@ class ExtractionService:
             try:
                 import llama_cpp
                 logger.info("[ExtractionService] Initializing llama_cpp in background from %s...", self.model_path)
-                threads = int(os.getenv("LLAMA_THREADS", "2"))
+                threads = int(os.getenv("LLAMA_THREADS", str(min(4, os.cpu_count() or 2))))
                 def _init():
                     return llama_cpp.Llama(
                         model_path=self.model_path,
@@ -750,26 +751,43 @@ class ExtractionService:
 
         from app.services.prompt_templates import MAX_INPUT_CHARS_BUDGET
         prompt = build_chatml_prompt(raw_text, max_chars=MAX_INPUT_CHARS_BUDGET)
+        max_output_tokens = int(os.getenv("LLAMA_MAX_OUTPUT_TOKENS", "2048"))
         try:
             output = self.llm(
                 prompt,
-                max_tokens=1000,
+                max_tokens=max_output_tokens,
                 temperature=0.0,
                 stop=["<|im_end|>", "\n\n\n"],
             )
             choice = output["choices"][0]
             finish_reason = choice.get("finish_reason", "stop")
-            if finish_reason == "length":
-                logger.warning("[ExtractionService] LLM hit token length limit (finish_reason='length'). Rejecting output.")
-                return None, "length"
-
             out_str = choice["text"].strip()
 
             if "```" in out_str:
                 out_str = re.sub(r"^```(?:json)?\s*", "", out_str, flags=re.I)
                 out_str = re.sub(r"\s*```.*$", "", out_str, flags=re.DOTALL).strip()
 
-            parsed = json.loads(out_str)
+            parsed = None
+            try:
+                parsed = json.loads(out_str)
+            except Exception:
+                # If generation was cut off, attempt to close trailing brackets/braces
+                try:
+                    open_braces = out_str.count("{") - out_str.count("}")
+                    open_brackets = out_str.count("[") - out_str.count("]")
+                    fixed_str = out_str + ("]" * max(0, open_brackets)) + ("}" * max(0, open_braces))
+                    parsed = json.loads(fixed_str)
+                    logger.info("[ExtractionService] Salvaged truncated JSON output from LLM.")
+                except Exception:
+                    pass
+
+            if not parsed:
+                if finish_reason == "length":
+                    logger.warning("[ExtractionService] LLM hit token length limit (finish_reason='length'). Rejecting output.")
+                    return None, "length"
+                logger.warning("[ExtractionService] LLM inference produced unparseable JSON.")
+                return None, "invalid_json"
+
             return parsed, finish_reason
         except Exception as exc:
             logger.warning("[ExtractionService] LLM inference failed: %s", exc)
@@ -902,9 +920,8 @@ class ExtractionService:
                         llm_result = await asyncio.to_thread(self._infer_llm, text_to_extract)
                         raw_extracted, finish_reason = (llm_result[0], llm_result[1]) if llm_result else (None, "failed")
 
-                        if finish_reason == "length":
-                            logger.warning("[ExtractionService] [Canary] LLM generation hit length limit. Falling back to deterministic extractor.")
-                            raw_extracted = None
+                        if not raw_extracted and finish_reason == "length":
+                            logger.warning("[ExtractionService] [Canary] LLM generation hit length limit and could not be parsed. Falling back to deterministic extractor.")
 
                         if raw_extracted:
                             processed = post_process_resume(raw_extracted)
