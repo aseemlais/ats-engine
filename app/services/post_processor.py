@@ -210,9 +210,13 @@ def validate_phone(phone_str: Optional[str]) -> Optional[str]:
 
 def clean_title(title_str: Optional[str]) -> Optional[str]:
     """
-    Cleans up job titles while STRICTLY PRESERVING parenthesized tech stacks.
-    For example: 'Full-Stack Developer (TypeScript / Node.js / React)' is kept intact.
-    Strips leading/trailing bullets, quotes, dashes, colons, and residual artifacts.
+    Cleans up job titles:
+    - Strips pipe delimiters and company/location suffixes (e.g. 'Role | Company' -> 'Role')
+    - Strips employment modalities (e.g. '(On-site)', '(Remote)', '(Hybrid)', '(Full-time)')
+    - Strips 'at <Company>' or '@ <Company>' suffixes
+    - Cleans unclosed parentheses (e.g. 'Role (On-site Intern' -> 'Role')
+    - STRICTLY PRESERVES parenthesized tech stacks (e.g. 'Full-Stack Developer (TypeScript / React)')
+    - Strips leading/trailing bullets, quotes, dashes, colons, and residual artifacts.
     """
     if not title_str:
         return None
@@ -221,13 +225,34 @@ def clean_title(title_str: Optional[str]) -> Optional[str]:
     if cleaned.lower() in EM_DASH_PLACEHOLDERS:
         return None
 
-    # Strip only leading/trailing punctuation, bullets, quotes, and dashes (NEVER parens!)
-    cleaned = cleaned.strip(" \t\n\r,.:;|–-—•*#\"'")
-
     # Remove residual zero-width or replacement artifacts and normalize non-breaking spaces
     cleaned = cleaned.replace("\u00a0", " ")
     cleaned = re.sub(r"[\u200b\u200e\u200f\ufeff\ufffd]", "", cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned).strip()
+
+    # 1. Split on pipe '|' delimiter (e.g. 'Generative AI Intern | Datapattern' -> 'Generative AI Intern')
+    if "|" in cleaned:
+        parts = [p.strip() for p in cleaned.split("|") if p.strip()]
+        if parts:
+            cleaned = parts[0]
+
+    # 2. Strip employment modalities in parentheses (e.g. (On-site...), (Remote...), (Hybrid...))
+    cleaned = re.sub(
+        r"\(?\s*\b(on-?site|remote|hybrid|wfh|full-?time|part-?time|contract|freelance)\b[^\)]*\)?",
+        "",
+        cleaned,
+        flags=re.I,
+    )
+
+    # 3. Strip ' at <Company>' or ' @ <Company>' at end if present
+    cleaned = re.sub(r"\s+(?:at|@)\s+[A-Z][A-Za-z0-9\s.,&-]+$", "", cleaned)
+
+    # 4. Clean unclosed trailing parentheses (e.g. 'Role (On-site Intern' -> 'Role')
+    if "(" in cleaned and ")" not in cleaned:
+        cleaned = re.sub(r"\(.*$", "", cleaned)
+
+    # 5. Strip leading/trailing punctuation, bullets, quotes, and dashes
+    cleaned = cleaned.strip(" \t\n\r,.:;|–-—•*#\"'")
 
     if not cleaned or cleaned.lower() in EM_DASH_PLACEHOLDERS:
         return None

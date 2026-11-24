@@ -19,7 +19,7 @@ EXTRACTION_SYSTEM_PROMPT = (
     '  "email": "email@example.com",\n'
     '  "phone": "+1234567890",\n'
     '  "location": "City, Country",\n'
-    '  "jobTitle": "Target or Current Role",\n'
+    '  "jobTitle": "Clean Professional Job Title Only",\n'
     '  "skills": ["Skill 1", "Skill 2"],\n'
     '  "education": [{"degree": "B.Tech/BS/MS", "institution": "Institution Name", "fieldOfStudy": "Field", "year": "2022"}],\n'
     '  "workExperience": [{"title": "Job Title", "company": "Company", "dates": "2020-2023", "durationYears": 3.0, "isCurrent": false, "description": "Key accomplishments"}],\n'
@@ -27,6 +27,7 @@ EXTRACTION_SYSTEM_PROMPT = (
     '  "projects": ["Project Name: Description"]\n'
     "}\n"
     "IMPORTANT RULES:\n"
+    "- 'jobTitle': Extract ONLY the professional title (e.g. 'Generative AI Intern' or 'Software Engineer'). DO NOT include company names, pipe characters ('|'), locations, or modalities like '(On-site Intern)'.\n"
     "- 'education', 'workExperience', and 'projects' MUST be arrays/lists of objects, NEVER dictionary mappings.\n"
     "- Return ONLY raw minified JSON. Do not include markdown codeblocks (no ```json), explanations, or preambles."
 )

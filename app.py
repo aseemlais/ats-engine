@@ -21,8 +21,7 @@ import spaces
 import gradio as gr
 from app.server import app as fastapi_app, adapter
 
-@spaces.GPU(duration=60)
-def evaluate_candidate_gpu(job_description: str, resume_text: str):
+def evaluate_candidate_app(job_description: str, resume_text: str):
     res = adapter.evaluate_candidate(
         job_title="Candidate Evaluation",
         job_description=job_description or "Software Engineer",
@@ -31,7 +30,7 @@ def evaluate_candidate_gpu(job_description: str, resume_text: str):
     return json.dumps(res, indent=2)
 
 demo = gr.Interface(
-    fn=evaluate_candidate_gpu,
+    fn=evaluate_candidate_app,
     inputs=[
         gr.Textbox(label="Job Description", lines=4, placeholder="Enter job description..."),
         gr.Textbox(label="Resume Text", lines=4, placeholder="Enter resume text...")

@@ -158,6 +158,20 @@ def store_resume(
     existing_has_data = bool(existing.get("extractedData")) if existing else False
 
     if existing and existing_has_data and (extractor_version is None or existing_version == extractor_version):
+        # Refresh jobRole / extractedData if newly parsed values are cleaner or updated
+        if job_role and job_role != existing.get("jobRole"):
+            try:
+                table = _get_table_ref(supabase, "CandidateResume")
+                upd_payload = {"jobRole": job_role}
+                if extracted_data:
+                    upd_payload["extractedData"] = extracted_data
+                table.update(upd_payload).eq("id", existing.get("id")).execute()
+                existing["jobRole"] = job_role
+                if extracted_data:
+                    existing["extractedData"] = extracted_data
+            except Exception as upd_err:
+                logger.warning(f"[Storage] Failed to refresh existing candidate jobRole: {upd_err}")
+
         logger.info(f"[Storage] Duplicate resume detected for hash {file_hash[:12]}... (Candidate ID: {existing.get('id')})")
         return {
             "candidateId": str(existing.get("id")),
