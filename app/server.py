@@ -14,8 +14,9 @@ from typing import List, Dict, Any, Optional, Tuple
 
 import uvicorn
 from fastapi import FastAPI, UploadFile, File, Form, Request, HTTPException, Query
+from pydantic import BaseModel
 from app.services.embedding_service import EmbeddingUnavailableError
-from fastapi.responses import JSONResponse, FileResponse
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -29,6 +30,7 @@ from app.services.resume_parser import ResumeParserService
 from app.services.structured_extractor import StructuredResumeExtractor
 from app.services.extraction_service import ExtractionService
 from app.adapters.extraction_adapter import ExtractionAdapter
+from app.services.mcp_client import mcp_client_service
 from app.storage.supabase_client import is_supabase_configured, get_missing_supabase_env_vars
 from app.storage.resume_storage import store_resume, ResumePersistenceError, StorageError
 from app.storage.candidate_repository import (
@@ -474,6 +476,181 @@ async def upload_resume_file(file: UploadFile = File(...)):
     filename = file.filename or "uploaded_resume.pdf"
     content = await file.read()
     return process_resume_upload(filename, content, file.content_type or "application/pdf")
+
+
+# =============================================================================
+# SharePoint / Microsoft 365 MCP Ingestion Routes
+# =============================================================================
+
+class SharePointImportPayload(BaseModel):
+    paths: List[str]
+
+
+class SharePointFetchPayload(BaseModel):
+    sharePointLink: str
+
+
+@app.get("/api/sharepoint/status")
+async def sharepoint_status():
+    """Returns current MCP connection status and mode (mock vs live)."""
+    provider = mcp_client_service.get_provider()
+    identity = await provider.whoami()
+    return {
+        "status": "ok",
+        "mock_mode": mcp_client_service.is_mock_mode,
+        "mcp_url": getattr(provider, "mcp_url", "https://mcp-resource.onrender.com/mcp"),
+        "identity": identity,
+    }
+
+
+@app.get("/api/sharepoint/folders")
+async def sharepoint_folders(path: str = Query("", description="Folder path in SharePoint")):
+    """
+    Lists files and subfolders from SharePoint via MCP provider.
+    Supports directory navigation, parent path backtracking, and item metadata.
+    """
+    provider = mcp_client_service.get_provider()
+    try:
+        folder_res = await provider.list_folder(path)
+        return folder_res.to_dict()
+    except Exception as exc:
+        logger.error(f"[SharePoint] Failed to list folder '{path}': {exc}")
+        raise HTTPException(status_code=500, detail=f"Failed to list SharePoint folder: {exc}")
+
+
+@app.post("/api/sharepoint/import")
+async def sharepoint_import(payload: SharePointImportPayload):
+    """
+    Imports a batch of selected resume files from SharePoint via MCP provider.
+    Streams each file's binary content directly into ResumeParserService and Supabase.
+    """
+    if not payload.paths:
+        raise HTTPException(status_code=400, detail="No file paths provided for import.")
+
+    provider = mcp_client_service.get_provider()
+    results = []
+    successful = 0
+    failed = 0
+
+    for item_path in payload.paths:
+        try:
+            filename, content, mime_type = await provider.get_file_content(item_path)
+            res = process_resume_upload(filename, content, mime_type)
+
+            if isinstance(res, JSONResponse):
+                body = json.loads(res.body.decode("utf-8")) if hasattr(res, "body") else {}
+                failed += 1
+                results.append({
+                    "path": item_path,
+                    "filename": filename,
+                    "success": False,
+                    "error": body.get("error", "Failed to parse resume."),
+                })
+            else:
+                successful += 1
+                results.append({
+                    "path": item_path,
+                    "filename": filename,
+                    "success": True,
+                    "candidateId": res.get("candidateId"),
+                    "candidateName": res.get("candidateName"),
+                    "jobRole": res.get("jobRole"),
+                    "resumeText": res.get("resumeText"),
+                    "isDuplicate": res.get("isDuplicate", False),
+                    "persistenceStatus": res.get("persistenceStatus", "persisted"),
+                    "storageObjectPath": res.get("storageObjectPath"),
+                })
+        except Exception as exc:
+            logger.error(f"[SharePoint] Failed importing file {item_path}: {exc}")
+            failed += 1
+            results.append({
+                "path": item_path,
+                "filename": Path(item_path).name,
+                "success": False,
+                "error": str(exc),
+            })
+
+    return {
+        "total": len(payload.paths),
+        "successful": successful,
+        "failed": failed,
+        "items": results,
+    }
+
+
+@app.post("/api/sharepoint/fetch-resumes")
+async def sharepoint_fetch_resumes(payload: SharePointFetchPayload):
+    """
+    Backwards-compatible endpoint for existing SharePoint folder link input in NewChatPage.
+    Scans the targeted folder, fetches all resumes, and returns structured resume objects.
+    """
+    provider = mcp_client_service.get_provider()
+    raw_link = payload.sharePointLink.strip()
+
+    # Extract target folder path if specified in link
+    target_path = ""
+    for candidate_folder in ("Engineering", "Product & Design", "Data Science & AI", "Engineering/Backend Candidates"):
+        if candidate_folder.lower() in raw_link.lower():
+            target_path = candidate_folder
+            break
+
+    try:
+        folder_res = await provider.list_folder(target_path)
+        file_items = [
+            it for it in folder_res.items
+            if it.item_type == "file" and it.extension in (".pdf", ".docx", ".txt", "")
+        ]
+
+        resumes = []
+        for it in file_items:
+            try:
+                fn, content, mime = await provider.get_file_content(it.path)
+                res = process_resume_upload(fn, content, mime)
+                if not isinstance(res, JSONResponse):
+                    resumes.append({
+                        "fileName": fn,
+                        "resumeText": res.get("resumeText", ""),
+                        "candidateId": res.get("candidateId"),
+                        "candidateName": res.get("candidateName"),
+                        "jobRole": res.get("jobRole"),
+                    })
+            except Exception as item_err:
+                logger.warning(f"[SharePoint] Skipping file {it.path}: {item_err}")
+
+        return {"resumes": resumes, "count": len(resumes)}
+    except Exception as exc:
+        logger.error(f"[SharePoint] Error fetching resumes from {raw_link}: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/api/mcp/callback")
+async def mcp_oauth_callback(code: Optional[str] = None, state: Optional[str] = None, error: Optional[str] = None):
+    """
+    OAuth redirect callback endpoint for Microsoft sign-in via Resource MCP.
+    """
+    if error:
+        return HTMLResponse(
+            f"<html><body style='font-family:sans-serif;padding:40px;text-align:center;'>"
+            f"<h2 style='color:#b91c1c;'>Microsoft Authentication Failed</h2>"
+            f"<p>{error}</p>"
+            f"</body></html>",
+            status_code=400,
+        )
+
+    return HTMLResponse(
+        "<html><body style='font-family:sans-serif;padding:40px;text-align:center;background:#f8fafc;'>"
+        "<div style='max-width:480px;margin:auto;padding:30px;background:#fff;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,0.08);'>"
+        "<h2 style='color:#033c67;'>Authentication Successful!</h2>"
+        "<p style='color:#64748b;font-size:14px;'>Your session with the Resource MCP has been verified.</p>"
+        "<p style='color:#033c67;font-weight:600;'>You may now close this tab and return to the ATS application.</p>"
+        "</div>"
+        "<script>"
+        "if (window.opener) {"
+        "  window.opener.postMessage({ type: 'MCP_AUTH_SUCCESS', code: '" + (code or "") + "' }, '*');"
+        "}"
+        "</script>"
+        "</body></html>"
+    )
 
 
 # =============================================================================
