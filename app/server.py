@@ -589,10 +589,15 @@ async def sharepoint_fetch_resumes(payload: SharePointFetchPayload):
 
     # Extract target folder path if specified in link
     target_path = ""
-    for candidate_folder in ("Engineering", "Product & Design", "Data Science & AI", "Engineering/Backend Candidates"):
-        if candidate_folder.lower() in raw_link.lower():
-            target_path = candidate_folder
+    # Check for Canada / Repository role folders in link
+    from app.services.mcp_client import CANADA_REPOSITORY_ROLES
+    for role in CANADA_REPOSITORY_ROLES:
+        if role.lower() in raw_link.lower():
+            target_path = f"Repository/{role}"
             break
+
+    if not target_path and "repository" in raw_link.lower():
+        target_path = "Repository/AI Engineer"
 
     try:
         folder_res = await provider.list_folder(target_path)

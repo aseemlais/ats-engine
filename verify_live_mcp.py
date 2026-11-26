@@ -39,7 +39,7 @@ async def main():
         print("\n[Step 2] Authentication successful! Client connected.")
 
         # 1. WhoAmI
-        print("\n--- 1. Testing 'whoami' tool ---")
+        print("\n--- 1. User Identity (whoami) ---")
         try:
             me = await client.call_tool("whoami")
             me_data = me.data if hasattr(me, "data") else me
@@ -47,32 +47,43 @@ async def main():
         except Exception as e:
             print(f"[Error] whoami failed: {e}")
 
-        # 2. List Tools
-        print("\n--- 2. Discovering Available MCP Tools ---")
-        try:
-            tools = await client.list_tools()
-            tool_list = tools if isinstance(tools, list) else getattr(tools, "tools", [])
-            print(f"Discovered {len(tool_list)} tools:")
-            for t in tool_list:
-                name = getattr(t, "name", str(t))
-                desc = getattr(t, "description", "")
-                schema = getattr(t, "parameters", getattr(t, "inputSchema", {}))
-                print(f"\n  Tool: {name}")
-                if desc:
-                    print(f"    Description: {desc}")
-                if schema:
-                    print(f"    Parameters: {json.dumps(schema, default=str)}")
-        except Exception as e:
-            print(f"[Error] list_tools failed: {e}")
+        # 2. Search Files
+        print("\n--- 2. Testing 'search_files' tool ---")
+        found_paths = []
+        for q in ["resume", "pdf", "Canada"]:
+            try:
+                s_res = await client.call_tool("search_files", {"query": q, "max_results": 10})
+                s_data = s_res.data if hasattr(s_res, "data") else s_res
+                items = s_data.get("items", []) if isinstance(s_data, dict) else (s_data if isinstance(s_data, list) else [])
+                print(f"Search '{q}': returned {len(items)} items")
+                for it in items[:5]:
+                    p = it.get("path") or it.get("name")
+                    print(f"  * [{it.get('type', 'item')}] {p}")
+                    if p and p not in found_paths:
+                        found_paths.append(p)
+            except Exception as e:
+                print(f"Search '{q}' error: {e}")
 
         # 3. List SharePoint Root Folder
-        print("\n--- 3. Testing 'list_folder' tool ---")
+        print("\n--- 3. Testing 'list_folder' tool (root: '') ---")
         try:
             top = await client.call_tool("list_folder", {"path": ""})
             top_data = top.data if hasattr(top, "data") else top
+            print("Root folder listing:")
             print(json.dumps(top_data, indent=2, default=str))
         except Exception as e:
-            print(f"[Error] list_folder failed: {e}")
+            print(f"[Error] list_folder root failed: {e}")
+
+        # 4. If search found files/folders, test listing or getting info
+        if found_paths:
+            test_path = found_paths[0]
+            print(f"\n--- 4. Testing 'get_file_info' on discovered item '{test_path}' ---")
+            try:
+                info = await client.call_tool("get_file_info", {"path": test_path})
+                info_data = info.data if hasattr(info, "data") else info
+                print(json.dumps(info_data, indent=2, default=str))
+            except Exception as e:
+                print(f"[Error] get_file_info failed: {e}")
 
     print("\n" + "=" * 70)
     print("Live MCP Verification Complete!")

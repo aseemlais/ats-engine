@@ -17,26 +17,27 @@ async def test_mock_sharepoint_provider_listing():
     res = await provider.list_folder("")
     assert res.count >= 3
     names = [it.name for it in res.items]
-    assert "Engineering" in names
-    assert "Product & Design" in names
+    assert "Repository" in names
+    assert "Canada opportunity JD" in names
 
     # Subfolder listing
-    eng_res = await provider.list_folder("Engineering")
-    assert eng_res.current_path == "Engineering"
-    assert eng_res.parent_path == ""
-    eng_names = [it.name for it in eng_res.items]
-    assert "Backend Candidates" in eng_names
-    assert "Alex_Rivera_Staff_Software_Engineer.txt" in eng_names
+    repo_res = await provider.list_folder("Repository")
+    assert repo_res.current_path == "Repository"
+    assert repo_res.parent_path == ""
+    repo_names = [it.name for it in repo_res.items]
+    assert ".Net Developer" in repo_names
+    assert "AI Engineer" in repo_names
+    assert "AWS" in repo_names
 
 @pytest.mark.anyio
 async def test_mock_sharepoint_provider_file_content():
     provider = MockSharePointProvider()
-    filename, content, mime = await provider.get_file_content("Engineering/Alex_Rivera_Staff_Software_Engineer.txt")
-    assert filename == "Alex_Rivera_Staff_Software_Engineer.txt"
+    filename, content, mime = await provider.get_file_content("Repository/AI Engineer/Arjun_Mehta_Lead_AI_Engineer.txt")
+    assert filename == "Arjun_Mehta_Lead_AI_Engineer.txt"
     assert len(content) > 100
     assert mime == "text/plain"
-    assert b"Alex Rivera" in content
-    assert b"FastAPI" in content
+    assert b"Arjun Mehta" in content
+    assert b"PyTorch" in content
 
 def test_sharepoint_status_endpoint(client):
     response = client.get("/api/sharepoint/status")
@@ -53,19 +54,19 @@ def test_sharepoint_folders_endpoint(client):
     data = response.json()
     assert "items" in data
     assert data["count"] >= 3
-    assert any(it["name"] == "Engineering" for it in data["items"])
+    assert any(it["name"] == "Repository" for it in data["items"])
 
     # Subfolder
-    response_sub = client.get("/api/sharepoint/folders?path=Engineering")
+    response_sub = client.get("/api/sharepoint/folders?path=Repository")
     assert response_sub.status_code == 200
     sub_data = response_sub.json()
-    assert sub_data["current_path"] == "Engineering"
-    assert any(it["name"] == "Backend Candidates" for it in sub_data["items"])
+    assert sub_data["current_path"] == "Repository"
+    assert any(it["name"] == "AI Engineer" for it in sub_data["items"])
 
 def test_sharepoint_import_endpoint(client):
     payload = {
         "paths": [
-            "Engineering/Alex_Rivera_Staff_Software_Engineer.txt"
+            "Repository/AI Engineer/Arjun_Mehta_Lead_AI_Engineer.txt"
         ]
     }
     response = client.post("/api/sharepoint/import", json=payload)
@@ -77,13 +78,13 @@ def test_sharepoint_import_endpoint(client):
 
     item = data["items"][0]
     assert item["success"] is True
-    assert item["filename"] == "Alex_Rivera_Staff_Software_Engineer.txt"
+    assert item["filename"] == "Arjun_Mehta_Lead_AI_Engineer.txt"
     assert item.get("resumeText") is not None
-    assert "FastAPI" in item.get("resumeText")
+    assert "PyTorch" in item.get("resumeText")
 
 def test_sharepoint_fetch_resumes_endpoint(client):
     payload = {
-        "sharePointLink": "https://datapattern.sharepoint.com/sites/hr/Engineering"
+        "sharePointLink": "https://datapattern.sharepoint.com/sites/hr/Repository/AI Engineer"
     }
     response = client.post("/api/sharepoint/fetch-resumes", json=payload)
     assert response.status_code == 200
@@ -91,7 +92,7 @@ def test_sharepoint_fetch_resumes_endpoint(client):
     assert "resumes" in data
     assert data["count"] >= 1
     names = [r["fileName"] for r in data["resumes"]]
-    assert any("Alex" in n for n in names)
+    assert any("Arjun" in n for n in names)
 
 def test_mcp_oauth_callback_endpoint(client):
     response = client.get("/api/mcp/callback?code=mock_auth_code_12345&state=xyz")
