@@ -90,6 +90,11 @@ class BaseSharePointProvider(abc.ABC):
         """Check authentication status and return signed-in identity."""
         pass
 
+    @abc.abstractmethod
+    async def search_files(self, query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+        """Search files by keyword or skill."""
+        pass
+
 
 class MockSharePointProvider(BaseSharePointProvider):
     """
@@ -254,6 +259,19 @@ class MockSharePointProvider(BaseSharePointProvider):
             "source": "Local Mock SharePoint Provider",
         }
 
+    async def search_files(self, query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+        q = query.lower()
+        results = []
+        for path, text in self.SAMPLE_RESUMES.items():
+            if q in path.lower() or q in text.lower():
+                results.append({
+                    "name": Path(path).name,
+                    "path": path,
+                    "type": "file",
+                    "size": len(text.encode("utf-8")),
+                })
+        return results[:max_results]
+
 
 class LiveFastMCPProvider(BaseSharePointProvider):
     """
@@ -337,29 +355,52 @@ class LiveFastMCPProvider(BaseSharePointProvider):
         filename = Path(path).name
         auth = OAuth(mcp_url=self.mcp_url, client_name="ATS App", callback_port=self.callback_port)
         async with Client(self.mcp_url, auth=auth) as client:
-            # Fallback tool discovery: try download_file, then read_file, then get_file
-            tool_name = os.getenv("MCP_DOWNLOAD_TOOL_NAME", "download_file")
-            try:
-                res = await client.call_tool(tool_name, {"path": path})
-            except Exception as e:
-                logger.warning("Primary download tool %s failed (%s), trying read_file", tool_name, e)
-                res = await client.call_tool("read_file", {"path": path})
+            full_text = ""
+            start_char = 0
+            max_chars = 20000
 
-            data = res.data if hasattr(res, "data") else res
-            # Handle possible return shapes: raw bytes, base64 dict, or text
-            if isinstance(data, bytes):
-                return filename, data, "application/octet-stream"
-            elif isinstance(data, dict):
-                import base64
-                if "content_base64" in data:
-                    b = base64.b64decode(data["content_base64"])
-                    return filename, b, data.get("content_type", "application/pdf")
-                elif "text" in data:
-                    return filename, data["text"].encode("utf-8"), "text/plain"
-            elif isinstance(data, str):
-                return filename, data.encode("utf-8"), "text/plain"
+            # Loop to handle chunked pagination (if has_more is true)
+            for _ in range(10):
+                res = await client.call_tool("read_file", {
+                    "path": path,
+                    "start_char": start_char,
+                    "max_chars": max_chars,
+                })
+                data = res.data if hasattr(res, "data") else res
 
-            raise ValueError(f"Unrecognized content structure returned by MCP for {path}")
+                if isinstance(data, dict):
+                    chunk = data.get("text") or data.get("content") or ""
+                    full_text += chunk
+                    if not data.get("has_more") or not data.get("next_start_char"):
+                        break
+                    start_char = int(data["next_start_char"])
+                elif isinstance(data, str):
+                    full_text += data
+                    break
+                elif isinstance(data, bytes):
+                    return filename, data, "application/octet-stream"
+                else:
+                    break
+
+            if full_text:
+                return filename, full_text.encode("utf-8"), "text/plain"
+
+            raise ValueError(f"No readable content returned by MCP for {path}")
+
+    async def search_files(self, query: str, max_results: int = 20) -> List[Dict[str, Any]]:
+        self._ensure_fastmcp()
+        from fastmcp import Client
+        from fastmcp.client.auth import OAuth
+
+        auth = OAuth(mcp_url=self.mcp_url, client_name="ATS App", callback_port=self.callback_port)
+        async with Client(self.mcp_url, auth=auth) as client:
+            res = await client.call_tool("search_files", {"query": query, "max_results": max_results})
+            data = res.data if hasattr(res, "data") else (res or {})
+            if isinstance(data, dict):
+                return data.get("items", [])
+            elif isinstance(data, list):
+                return data
+            return []
 
 
 class MCPClientService:
@@ -375,17 +416,18 @@ class MCPClientService:
     @property
     def is_mock_mode(self) -> bool:
         forced = os.getenv("MCP_MOCK_MODE", "").strip().lower()
-        if forced in ("true", "1", "yes", "on"):
-            return True
         if forced in ("false", "0", "no", "off"):
             return False
-
-        # Default to mock mode if fastmcp is not installed
-        try:
-            import fastmcp  # noqa: F401
-            return False
-        except ImportError:
+        if forced in ("true", "1", "yes", "on"):
             return True
+
+        # When MCP_LIVE_ENABLED is explicitly true, activate live mode
+        live_enabled = os.getenv("MCP_LIVE_ENABLED", "").strip().lower() in ("true", "1", "yes", "on")
+        if live_enabled:
+            return False
+
+        # Otherwise, default to mock mode so automated tests and unauthenticated runs stay safe
+        return True
 
     def get_provider(self) -> BaseSharePointProvider:
         if self.is_mock_mode:
