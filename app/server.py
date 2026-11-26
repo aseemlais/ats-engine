@@ -361,6 +361,20 @@ def process_resume_upload(
     try:
         ok, raw_text, cleaned_text, file_hash, err = parser.parse_file(temp_path)
         if not ok or not (cleaned_text or raw_text):
+            # Check if content is already pre-extracted text (e.g. from MCP read_file tool)
+            try:
+                decoded = content.decode("utf-8", errors="ignore")
+                if decoded and len(decoded.strip()) > 20:
+                    import ftfy
+                    from app.utils.text_cleaner import clean_text
+                    raw_text = ftfy.fix_text(decoded)
+                    cleaned_text = clean_text(raw_text)
+                    file_hash = hashlib.sha256(content).hexdigest()
+                    ok = True
+            except Exception:
+                pass
+
+        if not ok or not (cleaned_text or raw_text):
             return JSONResponse(
                 status_code=400,
                 content={"error": err or "The resume was uploaded, but no readable text could be extracted."}

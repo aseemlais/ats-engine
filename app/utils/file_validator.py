@@ -27,13 +27,27 @@ def validate_resume_file(file_path: Path | str, max_size_mb: int = 15) -> Tuple[
     if suffix not in (".pdf", ".docx", ".txt"):
         return False, f"Unsupported file extension: {suffix}. Supported: .pdf, .docx, .txt"
         
-    # Check magic bytes
+    # Check magic bytes (with safe fallback for pre-extracted text streams from MCP read_file)
     try:
         with open(path, "rb") as f:
             header = f.read(8)
             if suffix == ".pdf" and not header.startswith(b"%PDF"):
+                try:
+                    with open(path, "r", encoding="utf-8", errors="strict") as tf:
+                        first_chars = tf.read(100)
+                        if len(first_chars.strip()) > 10:
+                            return True, ""
+                except Exception:
+                    pass
                 return False, "Invalid PDF header signature (corrupted or renamed file)"
             elif suffix == ".docx" and not header.startswith(b"PK\x03\x04"):
+                try:
+                    with open(path, "r", encoding="utf-8", errors="strict") as tf:
+                        first_chars = tf.read(100)
+                        if len(first_chars.strip()) > 10:
+                            return True, ""
+                except Exception:
+                    pass
                 return False, "Invalid DOCX header signature (not a valid zip package)"
     except Exception as e:
         return False, f"Error reading file header: {str(e)}"

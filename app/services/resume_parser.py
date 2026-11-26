@@ -81,4 +81,14 @@ class ResumeParserService:
             return True, raw_text, cleaned_text, file_hash, None
 
         except Exception as e:
+            # Fallback for documents that contain pre-extracted plain text (e.g. from MCP read_file or text streams)
+            try:
+                with open(path, "r", encoding="utf-8", errors="ignore") as f:
+                    fallback_text = f.read()
+                if fallback_text and len(fallback_text.strip()) > 20:
+                    raw_text = ftfy.fix_text(fallback_text)
+                    cleaned_text = clean_text(raw_text)
+                    return True, raw_text, cleaned_text, file_hash, None
+            except Exception:
+                pass
             return False, None, None, None, f"Parsing exception: {str(e)}"

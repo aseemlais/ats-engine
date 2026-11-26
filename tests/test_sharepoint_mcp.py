@@ -66,21 +66,29 @@ def test_sharepoint_folders_endpoint(client):
 def test_sharepoint_import_endpoint(client):
     payload = {
         "paths": [
-            "Repository/AI Engineer/Arjun_Mehta_Lead_AI_Engineer.txt"
+            "Repository/AI Engineer/Arjun_Mehta_Lead_AI_Engineer.txt",
+            "Repository/.Net Developer/David_Miller_Senior_DotNet_Developer.docx",
+            "Repository/Adobe DevOps Specialist/Aarav_Sharma_Adobe_DevOps_Specialist.pdf",
         ]
     }
     response = client.post("/api/sharepoint/import", json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert data["total"] == 1
-    assert data["successful"] == 1
+    assert data["total"] == 3
+    assert data["successful"] == 3
     assert data["failed"] == 0
 
-    item = data["items"][0]
-    assert item["success"] is True
-    assert item["filename"] == "Arjun_Mehta_Lead_AI_Engineer.txt"
-    assert item.get("resumeText") is not None
-    assert "PyTorch" in item.get("resumeText")
+    txt_item = next(it for it in data["items"] if it["filename"].endswith(".txt"))
+    assert txt_item["success"] is True
+    assert "PyTorch" in txt_item.get("resumeText")
+
+    docx_item = next(it for it in data["items"] if it["filename"].endswith(".docx"))
+    assert docx_item["success"] is True
+    assert "C#" in docx_item.get("resumeText") or "Developer" in docx_item.get("resumeText")
+
+    pdf_item = next(it for it in data["items"] if it["filename"].endswith(".pdf"))
+    assert pdf_item["success"] is True
+    assert "DevOps" in pdf_item.get("resumeText") or "AEM" in pdf_item.get("resumeText")
 
 def test_sharepoint_fetch_resumes_endpoint(client):
     payload = {
